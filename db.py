@@ -322,12 +322,7 @@ def _yk_html2db(dump_path='b', db_path='ii.db'):
         log.warning(f'{board_name} is not standard board name')
         _add_board(db_file, board_name)
 
-    skip = 0
     for item in dump_folder.iterdir():
-        if skip > 5:
-            return
-        skip += 1
-
         html_files = [f.name for f in item.iterdir() if f.is_file() and f.suffix == '.html']
         if len(html_files) > 1:
             pp('too many htmls')
@@ -371,3 +366,4 @@ if __name__ == "__main__":
         _yk_html2db(dump_path=args.brd_dir, db_path=args.db_file)
     elif args.ii:
         util.die('not implemented')
+
