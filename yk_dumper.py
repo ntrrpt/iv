@@ -1,11 +1,19 @@
-import requests, os, time, subprocess, sys, random, string
+import requests, util, os, time, subprocess, sys, random, string
 from bs4 import BeautifulSoup
 
+# logging
 from loguru import logger as log
-from pprint import pprint as pp
-trace, info, err, succ = (log.trace, log.info, log.error, log.success)
-delay = time.sleep
 
+log.remove(0)
+log.add(sys.stderr, format = "<level>[{time:DD-MMM-YYYY HH:mm:ss}]</level> {message}",
+        backtrace = True, diagnose = True, colorize = True, level = 5)
+log.add('log.txt', format = "[{time:DD-MMM-YYYY HH:mm:ss}] {message}",
+        backtrace = True, diagnose = True, colorize = True, level = 5)
+
+trace, info, err, succ = (log.trace, log.info, log.error, log.success)
+
+
+EXTS = tuple(util.audio_exts + util.image_exts + util.video_exts)
 ARIA2_FILENAME = ''.join(random.choice(string.ascii_letters) for x in range(10)) + '.txt'
 
 aria2c_args = [
@@ -25,28 +33,6 @@ aria2c_args = [
     '-Z'
 ]
 
-types = (
-    '.jpg', 
-    '.png', 
-    '.gif', 
-    '.swf', 
-    '.webp',
-    '.mp4',
-    '.webm'
-)
-
-log.remove(0)
-log.add(
-        sys.stderr,
-        format = "<level>[{time:DD-MMM-YYYY HH:mm:ss}]</level> {message}",
-        backtrace = True, diagnose = True, colorize = True, level = 5
-    )
-log.add(
-        'log.txt',
-        format = "[{time:DD-MMM-YYYY HH:mm:ss}] {message}",
-        backtrace = True, diagnose = True, colorize = True, level = 5
-    )
-
 def dump_thread(link, board_sfx):
     img_links = []
 
@@ -64,7 +50,7 @@ def dump_thread(link, board_sfx):
         if not htm.startswith(f'/{board_sfx}/src/'):
             continue
 
-        if not htm.endswith(types): # /azu/src/1316779210367.jpg
+        if not htm.endswith(EXTS): # /azu/src/1316779210367.jpg
             continue
 
         img_links.append('http://ii.yakuji.moe' + htm)

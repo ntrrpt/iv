@@ -1,11 +1,11 @@
 import mimetypes
 from loguru import logger as log
 
-all_types = mimetypes.types_map
-
 video_exts = []
 image_exts = []
 audio_exts = []
+
+all_types = mimetypes.types_map
 
 for ext, mime in all_types.items():
     if mime.startswith("video/"):
