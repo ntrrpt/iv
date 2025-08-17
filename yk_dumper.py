@@ -25,6 +25,16 @@ aria2c_args = [
     '-Z'
 ]
 
+types = (
+    '.jpg', 
+    '.png', 
+    '.gif', 
+    '.swf', 
+    '.webp',
+    '.mp4',
+    '.webm'
+)
+
 log.remove(0)
 log.add(
         sys.stderr,
@@ -54,10 +64,10 @@ def dump_thread(link, board_sfx):
         if not htm.startswith(f'/{board_sfx}/src/'):
             continue
 
-        if not htm.endswith(('.jpg', '.png', '.gif', '.swf')): # /azu/src/1316779210367.jpg
+        if not htm.endswith(types): # /azu/src/1316779210367.jpg
             continue
 
-        #img_links.append('http://ii.yakuji.moe' + htm)
+        img_links.append('http://ii.yakuji.moe' + htm)
     
     img_links = list(set(img_links)) # remove duplicates
     img_links.append(link)

@@ -1,13 +1,19 @@
-import util, requests, re
+import util
 from nicegui import ui
+from loguru import logger as log
+
+import requests, re, mimetypes
 from bs4 import BeautifulSoup
+
 from pprint import pprint as pp
 import pprint
 
 import dateparser
-from contextlib import suppress
 
-menu_items = [
+def yakuify(url):
+    return ''.join(['http://ii.yakuji.moe',url])
+
+boards = [
     ['an',   'Живопись'],
     ['b',    'Бред'],
     ['bro',  'My Little Pony'],
@@ -34,40 +40,58 @@ menu_items = [
     ['x',    'Паранормальные явления']
 ]
 
-for i in menu_items:
-    i[1] = "/%s/ — %s" % (i[0], i[1])
-
-def yakuify(url):
-    return ''.join(['http://ii.yakuji.moe',url])
+def board_menu():
+    with ui.button(icon='menu'):
+        with ui.menu() as menu:
+            for item in boards:
+                desc = "/%s/ — %s" % (item[0], item[1])
+                (
+                    ui.menu_item(desc, lambda e, it=item[0]: ui.navigate.to(f'/catalog/{it}'))
+                    .props(f'id=post-{item[0]}')
+                )
 
 def yk_parse_time(date_str: str) -> int:
     '''
-    date_str = "Пн 11 августа 2025 09:08:29"
+        date_str = "Пн 11 августа 2025 09:08:29"
     '''
     dt = dateparser.parse(date_str, languages=['ru'])
     ts = int(dt.timestamp())
     return ts
 
-def yk_board_menu():
-    with ui.button(icon='menu'):
-        with ui.menu() as menu:
-            for item in menu_items:
-                (
-                    ui.menu_item(item[1], lambda e, it=item[0]: ui.navigate.to(f'/catalog/{it}'))
-                    .props(f'id=post-{item[0]}')
-                )
+def yk_parse_file(file_str):
+    r = {}
 
-def yk_conv_catalog(html: str) -> dict:
-    util.text_write('cat.txt', html)
-    soup = BeautifulSoup(html, "html.parser")
-    res = soup.find_all("div", id=lambda v: v and v.startswith("thread-"))
-    r = [yk_conv_thread(str(x)) for x in res]
+    try:
+        t = file_str.find("span", class_="filesize").find("a")["href"]
+        file_url = yakuify(t)
+
+        t = file_str.find("img", class_="thumb")["src"]
+        thumb_url = yakuify(t)
+
+        mime_type, _ = mimetypes.guess_type(file_url)
+
+        r = {
+            "url": file_url,
+            "thumb": thumb_url,
+            "file_type": mime_type,
+            "has_blob": False
+        }
+    except:
+        pass
+
     return r
 
-def yk_conv_skipped(skip_str: str) -> tuple:
+def yk_parse_catalog(html_str: str) -> dict:
+    util.text_write('cat.txt', html_str)
+    soup = BeautifulSoup(html_str, "html.parser")
+    res = soup.find_all("div", id=lambda v: v and v.startswith("thread-"))
+    r = [yk_parse_thread(str(x)) for x in res]
+    return r
+
+def yk_parse_skipped(skip_str: str) -> tuple:
     '''
-    Пропущено 1 сообщений. Для просмотра нажмите "Ответ".
-    Пропущено 51 сообщений и 35 изображений. Для просмотра нажмите "Ответ".
+        Пропущено 1 сообщений. Для просмотра нажмите "Ответ".
+        Пропущено 51 сообщений и 35 изображений. Для просмотра нажмите "Ответ".
     '''
     msg = img = 0
     pattern = re.compile(r'Пропущено (\d+) сообщений(?: и (\d+) изображений)?')
@@ -79,14 +103,16 @@ def yk_conv_skipped(skip_str: str) -> tuple:
 
     return (msg, img)
 
-def yk_conv_thread(html: str) -> dict:
-    r = []
+def yk_parse_thread(html: str) -> dict:
+    thread = {}
+    posts = []
 
     soup = BeautifulSoup(html, "html.parser")
 
     # OP
     op = soup.find("div", id=lambda v: v and v.startswith("thread-"))
     if op:
+        files = []
         op_id = op.get("id").replace("thread-", "")
         op_title = op.find("span", class_="filetitle").get_text(strip=True)
         op_poster = op.find("span", class_="postername").get_text(strip=True)
@@ -98,41 +124,37 @@ def yk_conv_thread(html: str) -> dict:
         except:
             date_time = 0
 
-        try:
-            file_link = op.find("span", class_="filesize").find("a")["href"]
-            file_link = yakuify(file_link)
+        t = yk_parse_file(op)
+        if t:
+            files.append(t)
 
-            thumb_img = op.find("img", class_="thumb")["src"]
-            thumb_img = yakuify(thumb_img)
-        except:
-            file_link = thumb_img = ""
-
-        # Текст
-        comment = op.find_all("blockquote")[0].get_text("\n", strip=True)
+        text = op.find_all("blockquote")[0].get_text("\n", strip=True)
 
         op_json = {
             "id": op_id,
-            "image": file_link,
-            "thumb": thumb_img,
-            "text": comment,
+            "files": files,
+            "text": text,
             "author": op_poster,
             "time": date_time,
-            "title": op_title
+            "index": len(posts) + 1
         }
 
-        r.append(op_json)
+        thread['id'] = op_id
+        thread['title'] = op_title
+
+        posts.append(op_json)
 
     # SKIPPED (catalog)
     skip_str = str(soup.find_all("span", class_="omittedposts"))
-    skip_tup = yk_conv_skipped(skip_str)
+    skip_tup = yk_parse_skipped(skip_str)
     if skip_tup[0] or skip_tup[1]:
         st = "%s/%s" % (skip_tup[0], skip_tup[1])
-        sk = {'id': 0, 'skipped': st}
-        r.append(sk)
+        thread["skipped"] = st
 
     # REPLIES
     replies = soup.find_all("table")
     for reply in replies:
+        files = []
         post = reply.find("td", class_="reply")
         post_id = post.get("id").replace("reply", "")
         poster_name = post.find("span", class_="commentpostername").get_text(strip=True)
@@ -144,43 +166,41 @@ def yk_conv_thread(html: str) -> dict:
         except:
             date_time = 0
 
-        try:
-            file_link = post.find("span", class_="filesize").find("a")["href"]
-            thumb_img = post.find("img", class_="thumb")["src"]
-            file_link = yakuify(file_link)
-            thumb_img = yakuify(thumb_img)
-        except:
-            file_link = thumb_img = ""
+        t = yk_parse_file(post)
+        if t:
+            files.append(t)
 
-        comment = post.find_all("blockquote")[-1].get_text("\n", strip=True)
+        text = post.find_all("blockquote")[-1].get_text("\n", strip=True)
 
         reply_json = {
             "id": post_id,
-            "image": file_link,
-            "thumb": thumb_img,
-            "text": comment,
+            "files": files,
+            "text": text,
             "author": poster_name,
-            "time": date_time
+            "time": date_time,
+            "index": len(posts) + 1
         }
 
-        r.append(reply_json)
+        posts.append(reply_json)
 
-    return r
+    thread["posts"] = posts
+    thread["source"] = 'yk'
+    return thread
 
 def _test_thread(url: str):
     try:
         r = requests.get(url, timeout=10)
 
     except Exception as e:
-        pp(f"r ex: {e}").classes('text-xl font-bold mb-4')
+        pp(f"r ex: {e}")
 
     if r:
         pp(url)
 
         try: 
-            conv_r = yk_conv_thread(r.text)
+            conv_r = yk_parse_thread(r.text)
         except Exception as e:
-            pp(f"conv ex: {e}").classes('text-xl font-bold mb-4')
+            pp(f"conv ex: {e}")
             return
 
         pp(conv_r)
@@ -190,19 +210,19 @@ def _test_catalog(url: str):
         r = requests.get(url, timeout=10)
 
     except Exception as e:
-        pp(f"r ex: {e}").classes('text-xl font-bold mb-4')
+        pp(f"r ex: {e}")
 
     if r:
         pp(url)
 
         try: 
-            conv_r = yk_conv_catalog(r.text)
+            conv_r = yk_parse_catalog(r.text)
         except Exception as e:
-            pp(f"conv ex: {e}").classes('text-xl font-bold mb-4')
+            pp(f"conv ex: {e}")
             return
 
         pp(conv_r)
 
 if __name__ == "__main__":
-    _test_thread("http://ii.yakuji.moe/b/res/5377207.html")
+    _test_thread("http://ii.yakuji.moe/b/res/4886591.html")
     #_test_catalog('http://ii.yakuji.moe/b/')
