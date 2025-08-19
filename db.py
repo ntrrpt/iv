@@ -236,6 +236,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True):
                 WHERE 
                     p.text LIKE ? COLLATE NOCASE;
             """
+            
             cur.execute(q, (f"%{TEXT}%",))
             r = cur.fetchall()
             count = dict(r[0])['total_count']
@@ -275,6 +276,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True):
                 WHERE 
                     posts_fts MATCH ?
             """
+
             cur.execute(q, (TEXT,))
             r = cur.fetchall()
             count = dict(r[0])['total_count']
@@ -331,6 +333,6 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True):
                     })
 
         r = list(posts.values())
-        log.trace(f"{len(r)} in {str(sw)}")
+        log.trace(f"{TEXT}: {len(r)} in {str(sw)}")
 
         return count, r
