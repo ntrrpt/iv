@@ -374,7 +374,7 @@ if __name__ in ["__main__", "__mp_main__"]:
     args = parser.parse_args()
 
     if args.db and not Path(args.db).exists():
-        log.error('%s doesn\'t exists' % _)
+        log.error('db file doesn\'t exist')
         sys.exit()
 
     if args.verbose:
