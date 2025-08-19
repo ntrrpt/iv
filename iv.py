@@ -207,7 +207,12 @@ def render_post(
 
 @ui.page('/search')
 async def db_search():
-    def draw(offset=0):
+    if not args.db:
+        raise HTTPException(status_code=404, detail='--db not enabled')
+
+    def draw(page=0):
+        limit = int(posts_on_page.value)
+        offset = limit*page
         q = str(query.value)
         sw = Stopwatch(2)
         
@@ -217,8 +222,8 @@ async def db_search():
                 args.db, 
                 q, 
                 FTS=fts_checkbox.value,
-                LIMIT=posts_on_page.value, 
-                OFFSET=posts_on_page.value*offset
+                LIMIT=limit, 
+                OFFSET=offset
             )
             sw.stop()
         except Exception as ex:
@@ -237,23 +242,20 @@ async def db_search():
                 render_post(post)
 
         page_buttons.clear()
-        if posts_on_page.value >= count:
+        if limit >= count:
             return
 
         with page_buttons:
-            pages = int(count / posts_on_page.value)
+            pages = int(count / limit) + 1
 
             for i in range(min(10, pages)):
-                ui.button(i, on_click=lambda e, ii=i: (draw(ii)))
+                ui.button(i, on_click=lambda e, ii=i: (draw(ii)), color='green' if i == page else 'primary')
 
             if pages > 10:
                 with ui.dropdown_button():
                     with ui.row().classes('w-full items-start bg-gray-100 rounded p-1 gap-1'):
                         for i in range(10, pages):
-                            ui.button(i, on_click=lambda e, ii=i: (draw(ii))) 
-
-    if not args.db:
-        raise HTTPException(status_code=404, detail='--db not enabled')
+                            ui.button(i, on_click=lambda e, ii=i: (draw(ii)), color='green' if i == page else 'primary') 
 
     with ui.header().classes('bg-blue-900 text-white').classes('p-1.5 gap-1.5 self-center transition-all'):
         search = ui.button(color='orange-8', icon='search')
@@ -262,11 +264,11 @@ async def db_search():
             props('autofocus outlined dense'). \
             classes('bg-gray-100')
 
+        query.on('keydown.enter', lambda e: (draw()))
+        
         search.on('click', lambda e: (draw()))
 
         posts_on_page = ui.number(label='posts on page', value=50, format='%d').props('autofocus outlined dense').classes('bg-gray-100 w-32')
-
-        query.on('keydown.enter', lambda e: (draw()))
         posts_on_page.on('keydown.enter', lambda e: (draw()))
 
         fts_checkbox = ui.checkbox('FTS5', value=True)
@@ -276,7 +278,6 @@ async def db_search():
         page_buttons = ui.button_group().props('outline')
 
     results = ui.column()
-    #count = 0
 
 @ui.page('/db/{board}')
 async def db_catalog(board: str):
@@ -288,6 +289,9 @@ async def db_catalog(board: str):
 
 @ui.page('/db/{board}/{thread_id}')
 async def db_thread(board: str, thread_id: int):
+    if not args.db:
+        raise HTTPException(status_code=404, detail='--db not enabled')
+        
     def draw(page=0):
         limit = int(posts_on_page.value)
         offset = page*limit
@@ -305,19 +309,16 @@ async def db_thread(board: str, thread_id: int):
             return
 
         with page_buttons:
-            pages = int(len(thread['posts']) / limit)
+            pages = int(len(thread['posts']) / limit) + 1
 
             for i in range(min(10, pages)):
-                ui.button(i, on_click=lambda e, ii=i: (draw(ii)))
+                ui.button(i, on_click=lambda e, ii=i: (draw(ii)), color='green' if i == page else 'primary')
 
             if pages > 10:
                 with ui.dropdown_button():
                     with ui.row().classes('w-full items-start bg-gray-100 rounded p-1 gap-1'):
                         for i in range(10, pages):
-                            ui.button(i, on_click=lambda e, ii=i: (draw(ii)))
-
-    if not args.db:
-        raise HTTPException(status_code=404, detail='--db not enabled')
+                            ui.button(i, on_click=lambda e, ii=i: (draw(ii)), color='green' if i == page else 'primary')
 
     if not db.find_board_by_name(args.db, board):
         s = f"board \'{board}\' not found"
