@@ -3,14 +3,14 @@ name = "iv"
 version = "0.0.3"
 description = "(WIP) imageboard viewer"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = "==3.13.*"
 dependencies = [
-    "bs4>=0.0.2",
-    "dateparser>=1.2.2",
-    "filetype>=1.2.0",
-    "loguru>=0.7.3",
-    "nicegui>=2.22.2",
-    "pywebview>=6.0",
-    "requests>=2.32.4",
-    "stopwatch-py>=2.0.1",
+    "bs4==0.0.2",
+    "dateparser==1.2.2",
+    "filetype==1.2.0",
+    "loguru==0.7.3",
+    "nicegui==2.22.2",
+    "pywebview==6.0",
+    "requests==2.32.4",
+    "stopwatch-py==2.0.1",
 ]

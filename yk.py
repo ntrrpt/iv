@@ -264,7 +264,7 @@ def html2db(dump_path='b', db_path='ii.db'):
         util.die('no dir')
 
     if not db_file.is_file() or args.recreate:
-        util.delete_file(db_file)
+        util.delete(db_file)
         db.init(db_path)
         log.info("db created!")
 
@@ -313,7 +313,7 @@ def html2db(dump_path='b', db_path='ii.db'):
         log.info(f"{item.name}: {i} of {len(threads)} ")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='db tools')
+    parser = argparse.ArgumentParser(description='yk parser')
 
     parser.add_argument('brd_dir', type=str, help='''
         input dir with thread folders 
