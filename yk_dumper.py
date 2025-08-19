@@ -12,8 +12,6 @@ log.add('log.txt', format = "[{time:DD-MMM-YYYY HH:mm:ss}] {message}",
 
 trace, info, err, succ = (log.trace, log.info, log.error, log.success)
 
-
-EXTS = tuple(util.audio_exts + util.image_exts + util.video_exts)
 ARIA2_FILENAME = ''.join(random.choice(string.ascii_letters) for x in range(10)) + '.txt'
 
 aria2c_args = [
@@ -50,7 +48,7 @@ def dump_thread(link, board_sfx):
         if not htm.startswith(f'/{board_sfx}/src/'):
             continue
 
-        if not htm.endswith(EXTS): # /azu/src/1316779210367.jpg
+        if not htm.endswith(util.via_exts): # /azu/src/1316779210367.jpg
             continue
 
         img_links.append('http://ii.yakuji.moe' + htm)

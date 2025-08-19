@@ -1,13 +1,15 @@
-import mimetypes
 from loguru import logger as log
+import mimetypes
 
+ext_2_mime = mimetypes.types_map
+mime_2_ext = {}
 video_exts = []
 image_exts = []
 audio_exts = []
 
-all_types = mimetypes.types_map
+for ext, mime in ext_2_mime.items():
+    mime_2_ext[mime] = ext
 
-for ext, mime in all_types.items():
     if mime.startswith("video/"):
         video_exts.append(ext)
     elif mime.startswith("image/"):
@@ -15,22 +17,34 @@ for ext, mime in all_types.items():
     elif mime.startswith("audio/"):
         audio_exts.append(ext)
 
+via_exts = tuple(video_exts + image_exts + audio_exts)
+
+def is_str_int(s):
+    try:
+        int(s)
+        return True
+    except ValueError:
+        return False
+
+def float_fmt(number, digits):
+    return f'{number:.{digits}f}'
+
 def stamp_fmt(timestamp: int) -> str:
     from datetime import datetime
     dt = datetime.fromtimestamp(timestamp)
     return dt.strftime("%H:%M:%S %d/%m/%Y")
 
-def text_append(path, data, end='\n'):
+def append(path, data, end='\n'):
     with open(path, 'a', encoding='utf-8') as f:
         f.write(data + end)
     log.trace(f"{path} appended")
 
-def text_write(path, data, end='\n'):
+def write(path, data, end='\n'):
     with open(path, 'w', encoding='utf-8') as f:
         f.write(data + end)
     log.trace(f"{path} writed")
 
-def delete_file(path):
+def delete(path):
     import pathlib
     rem_file = pathlib.Path(path)
     rem_file.unlink(missing_ok=True)

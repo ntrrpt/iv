@@ -1,67 +1,68 @@
-import util, yk_parse
+import util, yk
 from loguru import logger as log
-
+from stopwatch import Stopwatch
 import sqlite3, os, requests, filetype
 from pprint import pprint as pp, pformat as pf
 from pathlib import Path
 
-def _db_init(db: str):
+def init(db: str):
     schema = """
-    CREATE TABLE IF NOT EXISTS boards (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL UNIQUE,
-        description TEXT
-    );
+        CREATE TABLE IF NOT EXISTS boards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            description TEXT
+        );
 
-    CREATE TABLE IF NOT EXISTS threads (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        board_id INTEGER NOT NULL,
-        title TEXT,
-        FOREIGN KEY(board_id) REFERENCES boards(id)
-    );
+        CREATE TABLE IF NOT EXISTS threads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            board_id INTEGER NOT NULL,
+            title TEXT,
+            FOREIGN KEY(board_id) REFERENCES boards(id)
+        );
 
-    CREATE TABLE IF NOT EXISTS posts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        thread_id INTEGER NOT NULL,
-        post_id INTEGER NOT NULL UNIQUE,
-        author TEXT,
-        text TEXT NOT NULL,
-        time INTEGER,
-        FOREIGN KEY(thread_id) REFERENCES threads(id)
-    );
+        CREATE TABLE IF NOT EXISTS posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            thread_id INTEGER NOT NULL,
+            post_id INTEGER NOT NULL UNIQUE,
+            author TEXT,
+            text TEXT NOT NULL,
+            time INTEGER,
+            FOREIGN KEY(thread_id) REFERENCES threads(id)
+        );
 
-    CREATE TABLE IF NOT EXISTS attachments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        post_id INTEGER NOT NULL,
-        file_type TEXT,
-        file_url TEXT,
-        thumb_url TEXT,
-        file_data BLOB,
-        FOREIGN KEY(post_id) REFERENCES posts(post_id)
-    );
+        CREATE TABLE IF NOT EXISTS attachments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            post_id INTEGER NOT NULL,
+            file_id INTEGER NOT NULL,
+            file_type TEXT,
+            file_url TEXT,
+            thumb_url TEXT,
+            file_data BLOB,
+            FOREIGN KEY(post_id) REFERENCES posts(post_id)
+        );
 
-    CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5 (
-        text, content='posts', content_rowid='id'
-    );
+        CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5 (
+            text, content='posts', content_rowid='id'
+        );
 
-    CREATE TRIGGER IF NOT EXISTS posts_ai AFTER INSERT ON posts BEGIN
-        INSERT INTO posts_fts(rowid, text) VALUES (new.id, new.text);
-    END;
+        CREATE TRIGGER IF NOT EXISTS posts_ai AFTER INSERT ON posts BEGIN
+            INSERT INTO posts_fts(rowid, text) VALUES (new.id, new.text);
+        END;
 
-    CREATE TRIGGER IF NOT EXISTS posts_au AFTER UPDATE ON posts BEGIN
-        UPDATE posts_fts SET text = new.text WHERE rowid = new.id;
-    END;
+        CREATE TRIGGER IF NOT EXISTS posts_au AFTER UPDATE ON posts BEGIN
+            UPDATE posts_fts SET text = new.text WHERE rowid = new.id;
+        END;
 
-    CREATE TRIGGER IF NOT EXISTS posts_ad AFTER DELETE ON posts BEGIN
-        DELETE FROM posts_fts WHERE rowid = old.id;
-    END;
+        CREATE TRIGGER IF NOT EXISTS posts_ad AFTER DELETE ON posts BEGIN
+            DELETE FROM posts_fts WHERE rowid = old.id;
+        END;
     """
 
     with sqlite3.connect(db) as conn:
         conn.executescript(schema)
         conn.commit()
 
-def _add_board(db, name, description=''):
+def add_board(db, name, description=''):
     with sqlite3.connect(db) as conn:
         cur = conn.cursor()
 
@@ -73,7 +74,7 @@ def _add_board(db, name, description=''):
 
         return cur.lastrowid
 
-def _add_thread(db, board_id, title):
+def add_thread(db, board_id, title):
     with sqlite3.connect(db) as conn:
         cur = conn.cursor()
 
@@ -83,7 +84,7 @@ def _add_thread(db, board_id, title):
 
         return cur.lastrowid
 
-def _add_post(db, thread_id, post, path=''):
+def add_post(db, thread_id, post, path=''):
     with sqlite3.connect(db) as conn:
         cur = conn.cursor()
 
@@ -94,37 +95,34 @@ def _add_post(db, thread_id, post, path=''):
             for file in post['files']:
                 file_data = None
                 file_type = file['file_type'] or None
+                file_name = file['url'].split('/')[-1]
+                file_id = int(file_name.split('.')[0])
 
-                if path and args.files:
-                    f_url = file['url'].split('/')[-1]
+                if path:
                     f_path = [f for f in path.iterdir() if f.is_file() and f.name == f_url]
 
                     if f_path:
                         f_path = f_path[0]
                         f_abspath = f_path.resolve()
-                        log.trace(f"file: {f_abspath}")
 
                         kind = filetype.guess(f_abspath)
                         if kind:
                             file_type = kind.mime
-                            log.info(f'file: {file_type} | {f_abspath}')
 
                             with open(f_abspath, 'rb') as f:
                                 file_data = f.read()
 
                 q = """
-                    INSERT INTO attachments (post_id, file_type, file_url, thumb_url, file_data)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO attachments (post_id, file_id, file_type, file_url, thumb_url, file_data)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 """
-                cur.execute(q, (post.get('id'), file_type, file['url'], file['thumb'], file_data))
+                cur.execute(q, (post.get('id'), file_id, file_type, file['url'], file['thumb'], file_data))
 
             q = """
                 INSERT INTO posts (thread_id, post_id, author, text, time)
                 VALUES (?, ?, ?, ?, ?)
             """
             cur.execute(q, (thread_id, post['id'], post.get('author'), post.get('text'), post.get('time')))
-
-    conn.commit()
 
 def find_board_by_name(db, name):
     board_id = 0
@@ -217,61 +215,93 @@ def find_thread_by_post(db, post_id):
     if thread_id:
         return find_thread_by_id(db, thread_id)
 
-def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0):
+def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True):
     with sqlite3.connect(DB) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
-        """
-            -- non fts
-            SELECT
-                p.id,
-                p.post_id,
-                p.author,
-                p.text,
-                p.time,
-                a.file_url,
-                a.thumb_url,
-                a.file_type,
-                a.file_data,
-                b.name AS board
-            FROM 
-                posts_fts
-                JOIN posts p ON posts_fts.rowid = p.id
-                LEFT JOIN attachments a ON a.post_id = p.post_id
-                JOIN threads t ON p.thread_id = t.id
-                JOIN boards b ON t.board_id = b.id
-            WHERE 
-                posts_fts MATCH ?
-                LIMIT ? OFFSET ?;
+        count = 0
 
-        cur.execute(q, (TEXT, LIMIT, OFFSET))
-        
-        """
+        sw = Stopwatch(3)
+        sw.restart()
 
-        q = """
-            SELECT
-                p.id,
-                p.post_id,
-                p.author,
-                p.text,
-                p.time,
-                a.file_url,
-                a.thumb_url,
-                a.file_type,
-                a.file_data,
-                b.name AS board
-            FROM 
-                posts_fts
-                JOIN posts p ON posts_fts.rowid = p.id
-                LEFT JOIN attachments a ON a.post_id = p.post_id
-                JOIN threads t ON p.thread_id = t.id
-                JOIN boards b ON t.board_id = b.id
-            WHERE 
-                posts_fts MATCH ?
-                LIMIT ? OFFSET ?;
-        """
-        cur.execute(q, (TEXT, LIMIT, OFFSET))
+        if not FTS:
+            q = """
+                SELECT 
+                    COUNT(*) AS total_count
+                FROM 
+                    posts AS p
+                WHERE 
+                    p.text LIKE ? COLLATE NOCASE;
+            """
+            cur.execute(q, (f"%{TEXT}%",))
+            r = cur.fetchall()
+            count = dict(r[0])['total_count']
+
+            q = f"""
+                SELECT
+                    p.id AS id,
+                    p.post_id AS post_id,
+                    p.author,
+                    p.text,
+                    p.time,
+                    a.file_url,
+                    a.thumb_url,
+                    a.file_type,
+                    a.file_data,
+                    b.name AS board
+                FROM 
+                    posts AS p
+                    LEFT JOIN attachments AS a ON a.post_id = p.post_id
+                    JOIN threads AS t ON p.thread_id = t.id
+                    JOIN boards AS b ON t.board_id = b.id
+                WHERE 
+                    p.text LIKE ? COLLATE NOCASE
+                    ORDER BY p.id ASC
+                    LIMIT ? OFFSET ?;
+            """
+
+            cur.execute(q, (f"%{TEXT}%", LIMIT, OFFSET))
+        else:
+            q = """
+                SELECT 
+                    COUNT(*) AS total_count
+                FROM 
+                    posts_fts
+                    JOIN posts p ON posts_fts.rowid = p.id
+                WHERE 
+                    posts_fts MATCH ?
+            """
+            cur.execute(q, (TEXT,))
+            r = cur.fetchall()
+            count = dict(r[0])['total_count']
+
+            q = """
+                SELECT
+                    p.id,
+                    p.post_id,
+                    p.author,
+                    p.text,
+                    p.time,
+                    a.file_url,
+                    a.thumb_url,
+                    a.file_type,
+                    a.file_data,
+                    b.name AS board
+                FROM 
+                    posts_fts
+                    JOIN posts p ON posts_fts.rowid = p.id
+                    LEFT JOIN attachments a ON a.post_id = p.post_id
+                    JOIN threads t ON p.thread_id = t.id
+                    JOIN boards b ON t.board_id = b.id
+                WHERE 
+                    posts_fts MATCH ?
+                    ORDER BY p.id ASC
+                    LIMIT ? OFFSET ?;
+            """
+            cur.execute(q, (TEXT, LIMIT, OFFSET))
+
+        sw.stop()
 
         posts = {}
         for row in cur.fetchall():
@@ -282,7 +312,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0):
                     "author": r["author"],
                     "files": [],
                     "id": r["post_id"],
-                    "index": 0,
+                    "index": OFFSET + len(posts) + 1,
                     "text": r["text"],
                     "time": r["time"],
                     "board": r["board"],
@@ -296,74 +326,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0):
                         "has_blob": r["file_data"] is not None
                     })
 
-        return list(posts.values())
+        r = list(posts.values())
+        log.trace(f"{len(r)} in {str(sw)}")
 
-def _yk_html2db(dump_path='b', db_path='ii.db'):
-    dump_folder = Path(dump_path)
-    db_file = Path(db_path)
-    
-    if not dump_folder.exists():
-        util.die('no dir')
-
-    if not db_file.is_file() or args.rewrite:
-        util.delete_file(db_file)
-        _db_init(db_path)
-        log.info("db created!")
-
-    for board in yk_parse.boards:
-        if find_board_by_name(db_file, board[0]):
-            continue
-
-        _add_board(db_file, board[0], board[1])
-    
-    board_name = dump_folder.name
-    board_id = find_board_by_name(db_file, board_name)
-    if not board_id:
-        log.warning(f'{board_name} is not standard board name')
-        _add_board(db_file, board_name)
-
-    for item in dump_folder.iterdir():
-        html_files = [f.name for f in item.iterdir() if f.is_file() and f.suffix == '.html']
-        if len(html_files) > 1:
-            pp('too many htmls')
-            return
-
-        html_file = item / html_files[0] # posixpath
-        html_file = str(html_file) # str
-
-        log.info(f"thread: {html_file}")
-
-        with open(html_file, 'r', encoding='utf-8') as f:
-            html_data = f.read()
-
-        thread = yk_parse.yk_parse_thread(html_data)
-        title = thread['title'] or ''
-
-        pos_id = _add_thread(db_file, board_id, title)
-
-        for post in thread['posts']:
-            _add_post(db_file, pos_id, post, item)
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description='db tools')
-
-    parser.add_argument('brd_dir', type=str, help='Input dir with thread folders (b/1337/1337.html)')
-    parser.add_argument('db_file', type=str, help='Output database file')
-
-    parser.add_argument('--yk', action="store_true", help='dump ii.yakuji.moe threads')
-    parser.add_argument('--ii', action="store_true", help='dump iichan.hk threads')
-    parser.add_argument('--rewrite', action="store_true", default=False, help='rewrite db')
-    parser.add_argument('--files', action="store_true", default=False, help='add file blobs to db')
-
-    args = parser.parse_args()
-
-    if sum([args.ii, args.yk]) > 1:
-        util.die('need only one option, yk or ii')
-
-    if args.yk:
-        _yk_html2db(dump_path=args.brd_dir, db_path=args.db_file)
-    elif args.ii:
-        util.die('not implemented')
-
+        return count, r
