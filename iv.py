@@ -23,7 +23,7 @@ color_blank = """
 """
 
 @app.get('/res/{board}/{filename}')
-async def serve_cached_file(board, filename: str):
+async def serve_local_file(board, filename: str):
     if board not in cache_files:
         s = f"board \'{board}\' not in cache_files"
         log.warning(s)
@@ -115,14 +115,13 @@ def render_post(
         .props(f'id=post-{post["id"]}')
     ):
         for file in post["files"] or []:
-            #todo: use db['file_id']
             try:
-                file_name = file['url'].split('/')[-1]
-                thumb_url = file_url = f'/res/{post["board"]}/{file_name}'
+                if not cache_files:
+                    raise
+                file_url = thumb_url = f'/res/{post["board"]}/{file['file_name']}'
             except:
                 file_url = file['url']
-
-            #thumb_url = file["thumb"]
+                thumb_url = file["thumb"]
 
             with ui.dialog().props('backdrop-filter="blur(8px) brightness(40%)"') as dialog, ui.card():
                 with ui.link(target=file_url):
@@ -208,7 +207,7 @@ def render_post(
 
 @ui.page('/search')
 async def db_search():
-    def rqst(offset=0):
+    def draw(offset=0):
         q = str(query.value)
         sw = Stopwatch(2)
         
@@ -232,30 +231,30 @@ async def db_search():
             position='top'
         )
 
+        results.clear()
         with results:
-            results.clear()
             for post in posts:
                 render_post(post)
 
-        pages = int(count / posts_on_page.value) + 1
-
         page_buttons.clear()
-        
-        if posts_on_page.value < count:
-            with page_buttons:
-                for i in range(min(10, pages)):
-                    ui.button(i, on_click=lambda e, ii=i: (
-                        rqst(ii)
-                    ))
+        if posts_on_page.value >= count:
+            return
 
-                if pages > 10:
-                    with ui.dropdown_button():
-                        with ui.row().classes('w-full items-start bg-gray-100 rounded p-1 gap-1'):
-                            for i in range(10, pages):
-                                ui.button(i, on_click=lambda e, ii=i: (
-                                    rqst(ii)
-                                )) 
-                        
+        with page_buttons:
+            pages = int(count / posts_on_page.value)
+
+            for i in range(min(10, pages)):
+                ui.button(i, on_click=lambda e, ii=i: (draw(ii)))
+
+            if pages > 10:
+                with ui.dropdown_button():
+                    with ui.row().classes('w-full items-start bg-gray-100 rounded p-1 gap-1'):
+                        for i in range(10, pages):
+                            ui.button(i, on_click=lambda e, ii=i: (draw(ii))) 
+
+    if not args.db:
+        raise HTTPException(status_code=404, detail='--db not enabled')
+
     with ui.header().classes('bg-blue-900 text-white').classes('p-1.5 gap-1.5 self-center transition-all'):
         search = ui.button(color='orange-8', icon='search')
 
@@ -263,10 +262,12 @@ async def db_search():
             props('autofocus outlined dense'). \
             classes('bg-gray-100')
 
-        search.on('click', lambda e: (rqst()))
-        query.on('keydown.enter', lambda e: (rqst()))
+        search.on('click', lambda e: (draw()))
 
-        posts_on_page = ui.number(label='posts on page', value=10, format='%d').props('autofocus outlined dense').classes('bg-gray-100')
+        posts_on_page = ui.number(label='posts on page', value=50, format='%d').props('autofocus outlined dense').classes('bg-gray-100 w-32')
+
+        query.on('keydown.enter', lambda e: (draw()))
+        posts_on_page.on('keydown.enter', lambda e: (draw()))
 
         fts_checkbox = ui.checkbox('FTS5', value=True)
 
@@ -275,49 +276,82 @@ async def db_search():
         page_buttons = ui.button_group().props('outline')
 
     results = ui.column()
-    count = 0
+    #count = 0
 
 @ui.page('/db/{board}')
 async def db_catalog(board: str):
+    if not args.db:
+        raise HTTPException(status_code=404, detail='--db not enabled')
+
     log.info(board)
     ui.label(f"^____^ catalog")
 
 @ui.page('/db/{board}/{thread_id}')
 async def db_thread(board: str, thread_id: int):
+    def draw(page=0):
+        limit = int(posts_on_page.value)
+        offset = page*limit
+        
+        results.clear()
+
+        with results:
+            chk = [x for x in range(offset, offset + limit)]
+            for i, post in enumerate(thread['posts']):
+                if i in chk:
+                    render_post(post)
+
+        page_buttons.clear()
+        if limit >= len(thread['posts']):
+            return
+
+        with page_buttons:
+            pages = int(len(thread['posts']) / limit)
+
+            for i in range(min(10, pages)):
+                ui.button(i, on_click=lambda e, ii=i: (draw(ii)))
+
+            if pages > 10:
+                with ui.dropdown_button():
+                    with ui.row().classes('w-full items-start bg-gray-100 rounded p-1 gap-1'):
+                        for i in range(10, pages):
+                            ui.button(i, on_click=lambda e, ii=i: (draw(ii)))
+
+    if not args.db:
+        raise HTTPException(status_code=404, detail='--db not enabled')
+
     if not db.find_board_by_name(args.db, board):
         s = f"board \'{board}\' not found"
-        log.warning(s)
-        raise HTTPException(status_code=404, detail=s)
+        log.warning(s); raise HTTPException(status_code=404, detail=s)
 
     thread = db.find_thread_by_post(args.db, thread_id)
 
     if not thread:
         s = f"thread \'{thread_id}\' not found"
-        log.warning(s)
-        raise HTTPException(status_code=404, detail=s)
+        log.warning(s); raise HTTPException(status_code=404, detail=s)
 
-    with ui.header().classes('p-3 gap-3 bg-blue-900 text-white'):
+    with ui.header().classes('bg-blue-900 text-white').classes('p-1.5 gap-1.5 self-center transition-all'):
         with ui.column().style('margin-top: -0.5em;'):
-            b_tid = f"{board}/{thread_id}"
-            title = thread['title'] or b_tid
-            
+            title = thread['title'] or f"{board}/{thread_id}"
             ui.label(title).classes('text-xl font-bold')
-            
-            ui.label(f"{len(thread['posts'])} posts"). \
-                style('margin-top: -1em;')
+            ui.label(f"{len(thread['posts'])} posts").style('margin-top: -1em;')
 
-            #ui.space()
+        ui.space()
+
+        refresh = ui.button(color='orange-8', icon='refresh')
+        refresh.on('click', lambda e: (draw()))
+
+        posts_on_page = ui.number(label='posts on page', value=50, format='%d').props('autofocus outlined dense').classes('bg-gray-100 w-32')
+        posts_on_page.on('keydown.enter', lambda e: (draw()))
+
+        ui.space()
+
+        page_buttons = ui.button_group().props('outline')
 
     cache_thread[ui.context.client.id] = thread.copy()
 
-    sw = Stopwatch(3)
-    sw.restart()
+    results = ui.column()
 
-    for post in thread['posts']:
-        render_post(post)
-
-    sw.stop()
-    log.trace('render_posts: %s' % str(sw))
+    draw()
 
     if thread_id != thread['posts'][0]['id']:
         scroll_to_post(thread_id)
@@ -338,6 +372,10 @@ if __name__ in ["__main__", "__mp_main__"]:
         '''
     )
     args = parser.parse_args()
+
+    if args.db and not Path(args.db).exists():
+        log.error('%s doesn\'t exists' % _)
+        sys.exit()
 
     if args.verbose:
         log.remove(); log.add(sys.stderr, level="TRACE")

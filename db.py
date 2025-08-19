@@ -33,8 +33,8 @@ def init(db: str):
         CREATE TABLE IF NOT EXISTS attachments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             post_id INTEGER NOT NULL,
-            file_id INTEGER NOT NULL,
             file_type TEXT,
+            file_name TEXT,
             file_url TEXT,
             thumb_url TEXT,
             file_data BLOB,
@@ -96,7 +96,7 @@ def add_post(db, thread_id, post, path=''):
                 file_data = None
                 file_type = file['file_type'] or None
                 file_name = file['url'].split('/')[-1]
-                file_id = int(file_name.split('.')[0])
+                #file_id = int(file_name.split('.')[0])
 
                 if path:
                     f_path = [f for f in path.iterdir() if f.is_file() and f.name == f_url]
@@ -113,10 +113,10 @@ def add_post(db, thread_id, post, path=''):
                                 file_data = f.read()
 
                 q = """
-                    INSERT INTO attachments (post_id, file_id, file_type, file_url, thumb_url, file_data)
+                    INSERT INTO attachments (post_id, file_type, file_name, file_url, thumb_url, file_data)
                     VALUES (?, ?, ?, ?, ?, ?)
                 """
-                cur.execute(q, (post.get('id'), file_id, file_type, file['url'], file['thumb'], file_data))
+                cur.execute(q, (post.get('id'), file_type, file_name, file['url'], file['thumb'], file_data))
 
             q = """
                 INSERT INTO posts (thread_id, post_id, author, text, time)
@@ -152,6 +152,7 @@ def find_thread_by_id(db, thread_id):
                 p.text,
                 p.time,
                 a.file_url,
+                a.file_name,
                 a.thumb_url,
                 a.file_type,
                 a.file_data,
@@ -187,6 +188,7 @@ def find_thread_by_id(db, thread_id):
                 if r["file_url"]:
                     f = {
                         "url": r["file_url"],
+                        "file_name": r["file_name"],
                         "thumb": r["thumb_url"],
                         "file_type": r["file_type"],
                         "has_blob": r["file_data"] is not None
@@ -246,6 +248,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True):
                     p.text,
                     p.time,
                     a.file_url,
+                    a.file_name,
                     a.thumb_url,
                     a.file_type,
                     a.file_data,
@@ -284,6 +287,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True):
                     p.text,
                     p.time,
                     a.file_url,
+                    a.file_name,
                     a.thumb_url,
                     a.file_type,
                     a.file_data,
@@ -312,7 +316,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True):
                     "author": r["author"],
                     "files": [],
                     "id": r["post_id"],
-                    "index": OFFSET + len(posts) + 1,
+                    "index": int(OFFSET) + len(posts) + 1,
                     "text": r["text"],
                     "time": r["time"],
                     "board": r["board"],

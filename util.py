@@ -1,5 +1,8 @@
 from loguru import logger as log
+from datetime import datetime
 import mimetypes
+import pathlib
+import sys
 
 ext_2_mime = mimetypes.types_map
 mime_2_ext = {}
@@ -30,7 +33,7 @@ def float_fmt(number, digits):
     return f'{number:.{digits}f}'
 
 def stamp_fmt(timestamp: int) -> str:
-    from datetime import datetime
+    
     dt = datetime.fromtimestamp(timestamp)
     return dt.strftime("%H:%M:%S %d/%m/%Y")
 
@@ -45,13 +48,18 @@ def write(path, data, end='\n'):
     log.trace(f"{path} writed")
 
 def delete(path):
-    import pathlib
     rem_file = pathlib.Path(path)
     rem_file.unlink(missing_ok=True)
     log.trace(f"{path} deleted")
 
 def die(s=''):
-    import sys
     if s:
         log.critical(str(s))
     sys.exit()
+
+if __name__ in "__main__":
+    print("%s: %s" % ('ext_2_mime', ext_2_mime))
+    print("%s: %s" % ('mime_2_ext', mime_2_ext))
+    print("%s: %s" % ('video_exts', video_exts))
+    print("%s: %s" % ('image_exts', image_exts))
+    print("%s: %s" % ('audio_exts', audio_exts))
