@@ -31,7 +31,7 @@ boards = [
     ['d',     'Работа сайта'],
 
     ['an',    'Живопись'],
-    ['b',     'Бред'],
+    ['b',     'Бред'], # ok
     ['bro',   'My Little Pony'],
     ['fr' ,   'Фурри'],
     ['gf',    'GIF- и FLASH-анимация'],
@@ -61,8 +61,8 @@ boards = [
     ['a',     'Аниме и манга'],
     ['aa',    'Аниме-арт'],
     ['abe',   'Old Home'],
-    ['azu',   'Azumanga Daioh'],
-    ['c',     'Косплей'],
+    ['azu',   'Azumanga Daioh'], # ok
+    ['c',     'Косплей'], # ok
     ['dn',    'Death Note'],
     ['fi',    'Фигурки'],
     ['hau',   'Higurashi no Naku Koro ni'],
@@ -251,7 +251,7 @@ def html2db(dump_path='b', db_path='ii.db'):
     if not db_file.is_file() or args.recreate:
         util.delete(db_file)
         db.init(db_path)
-        log.info("db created!")
+        log.success("db created!")
 
     for board in boards:
         if db.find_board_by_name(db_file, board[0]):
@@ -293,7 +293,7 @@ def html2db(dump_path='b', db_path='ii.db'):
         pos_id = db.add_thread(db_file, board_id, title)
 
         for post in thread['posts']:
-            db.add_post(db_file, pos_id, post, item if args.files else '')
+            db.add_post(db_file, board_id, pos_id, post, item if args.files else '')
 
         log.info(f"{item.name}: {i} of {len(threads)} ")
 

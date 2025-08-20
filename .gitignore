@@ -9,9 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
-# dumped test boards
-b/
-azu/
+# test boards
+**
 
 # test dbs
 *.db

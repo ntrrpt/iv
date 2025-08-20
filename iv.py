@@ -19,8 +19,7 @@ import util, db, yk
 
 from stopwatch import Stopwatch
 
-pp = pprint.pformat
-pf = pprint.pprint
+pp = util.pp
 
 cache_thread = {}
 cache_files = {}
@@ -139,7 +138,7 @@ def render_post(post, disable_menu=False):
         .props(f'id=post-{post["id"]}')
     ):
         for file in post["files"] or []:
-            if file["file_data"]:
+            if file["file_data"] is not None:
                 file_url = thumb_url = image_from_bytes(file["file_data"], file["file_type"])
             elif not cache_files:
                 file_url = file['url']
@@ -341,6 +340,8 @@ async def db_thread(board: str, thread_id: int):
             chk = [x for x in range(offset, offset + limit)]
             for i, post in enumerate(thread['posts']):
                 if i in chk:
+                    print()
+                    util.pp(post)
                     render_post(post)
 
         page_buttons.clear()
