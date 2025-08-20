@@ -52,6 +52,11 @@ def delete(path):
     rem_file.unlink(missing_ok=True)
     log.trace(f"{path} deleted")
 
+def pw(path, data, end='\n'):
+    s = str(pprint.pformat(str(data)))
+    write(path, s, end)
+    log.trace(f"{path} pwd")
+
 def die(s=''):
     if s:
         log.critical(str(s))

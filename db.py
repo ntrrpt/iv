@@ -99,7 +99,7 @@ def add_post(db, thread_id, post, path=''):
                 #file_id = int(file_name.split('.')[0])
 
                 if path:
-                    f_path = [f for f in path.iterdir() if f.is_file() and f.name == f_url]
+                    f_path = [f for f in path.iterdir() if f.is_file() and f.name == file_name]
 
                     if f_path:
                         f_path = f_path[0]
@@ -191,7 +191,7 @@ def find_thread_by_id(db, thread_id):
                         "file_name": r["file_name"],
                         "thumb": r["thumb_url"],
                         "file_type": r["file_type"],
-                        "has_blob": r["file_data"] is not None
+                        "file_data": r["file_data"]# is not None
                     }
 
                     posts[pid]["files"].append(f)
@@ -236,7 +236,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True):
                 WHERE 
                     p.text LIKE ? COLLATE NOCASE;
             """
-            
+
             cur.execute(q, (f"%{TEXT}%",))
             r = cur.fetchall()
             count = dict(r[0])['total_count']
@@ -329,10 +329,30 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True):
                         "url": r["file_url"],
                         "thumb": r["thumb_url"],
                         "file_type": r["file_type"],
-                        "has_blob": r["file_data"] is not None
+                        "file_data": r["file_data"]
                     })
 
         r = list(posts.values())
         log.trace(f"{TEXT}: {len(r)} in {str(sw)}")
 
         return count, r
+
+def find_blob_by_post(db, post_id):
+    file_data = b''
+
+    with sqlite3.connect(db) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        q = "SELECT file_data FROM attachments WHERE post_id = ?"
+        cur.execute(q, (post_id,))
+        r = cur.fetchone()
+        
+        if r:
+            file_data = r[0]
+
+        return file_data
+    
+'''if __name__ == "__main__":
+    r = find_blob_by_post('yk.db', 7904)
+    print(r)'''
