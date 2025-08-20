@@ -3,6 +3,7 @@ from datetime import datetime
 import mimetypes
 import pathlib
 import sys
+import pprint
 
 ext_2_mime = mimetypes.types_map
 mime_2_ext = {}
@@ -56,6 +57,10 @@ def pw(path, data, end='\n'):
     s = str(pprint.pformat(str(data)))
     write(path, s, end)
     log.trace(f"{path} pwd")
+
+def pp(data):
+    s = str(pprint.pformat(str(data)))
+    print(s)
 
 def die(s=''):
     if s:
