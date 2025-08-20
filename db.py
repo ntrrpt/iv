@@ -22,23 +22,26 @@ def init(db: str):
 
         CREATE TABLE IF NOT EXISTS posts (
             seq INTEGER PRIMARY KEY AUTOINCREMENT,
+            board_id INTEGER NOT NULL,
             thread_id INTEGER NOT NULL,
-            post_id INTEGER NOT NULL UNIQUE,
+            post_id INTEGER NOT NULL,
             author TEXT,
             text TEXT NOT NULL,
             time INTEGER,
-            FOREIGN KEY(thread_id) REFERENCES threads(seq)
+            FOREIGN KEY(thread_id) REFERENCES threads(seq),
+            FOREIGN KEY(board_id) REFERENCES boards(seq),
+            UNIQUE(board_id, post_id)
         );
 
         CREATE TABLE IF NOT EXISTS attachments (
             seq INTEGER PRIMARY KEY AUTOINCREMENT,
-            post_id INTEGER NOT NULL,
+            post_seq INTEGER NOT NULL,
             file_type TEXT,
             file_name TEXT,
             file_url TEXT,
             thumb_url TEXT,
             file_data BLOB,
-            FOREIGN KEY(post_id) REFERENCES posts(seq)
+            FOREIGN KEY(post_seq) REFERENCES posts(seq)
         );
 
         CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5 (
@@ -70,7 +73,7 @@ def add_board(db, name, description=''):
         cur.execute(q, (name, description))
         conn.commit()
 
-        log.success(f'board {name} created')
+        log.trace(f'board {name} created')
 
         return cur.lastrowid
 
@@ -84,7 +87,7 @@ def add_thread(db, board_id, title):
 
         return cur.lastrowid
 
-def add_post(db, thread_id, post, path=''):
+def add_post(db, board_id, thread_id, post, path=''):
     with sqlite3.connect(db) as conn:
         cur = conn.cursor()
 
@@ -113,19 +116,19 @@ def add_post(db, thread_id, post, path=''):
                                 file_data = f.read()
 
                 q = """
-                    INSERT INTO attachments (post_id, file_type, file_name, file_url, thumb_url, file_data)
+                    INSERT INTO attachments (post_seq, file_type, file_name, file_url, thumb_url, file_data)
                     VALUES (?, ?, ?, ?, ?, ?)
                 """
                 cur.execute(q, (post['id'], file_type, file_name, file['url'], file['thumb'], file_data))
 
             q = """
-                INSERT INTO posts (thread_id, post_id, author, text, time)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO posts (board_id, thread_id, post_id, author, text, time)
+                VALUES (?, ?, ?, ?, ?, ?)
             """
-            cur.execute(q, (thread_id, post['id'], post['author'], post['text'], post['time']))
+            cur.execute(q, (board_id, thread_id, post['id'], post['author'], post['text'], post['time']))
 
 def find_board_by_name(db, name):
-    board_id = 0
+    board_id = None
     with sqlite3.connect(db) as conn:
         cur = conn.cursor()
 
@@ -159,7 +162,7 @@ def find_thread_by_seq(db, thread_seq):
                 b.name AS board
             FROM 
                 posts p
-                LEFT JOIN attachments a ON a.post_id = p.post_id
+                LEFT JOIN attachments a ON a.post_seq = p.post_id
                 JOIN threads t ON p.thread_id = t.seq
                 JOIN boards b ON t.board_id = b.seq
             WHERE 
@@ -217,7 +220,7 @@ def find_thread_by_post(db, post_id):
     if thread_id:
         return find_thread_by_seq(db, thread_id)
 
-def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True):
+def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True, BOARDS=[]):
     with sqlite3.connect(DB) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
@@ -241,10 +244,10 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True):
             r = cur.fetchall()
             count = dict(r[0])['total_count']
 
-            q = f"""
+            q = """
                 SELECT
-                    p.seq AS seq,
-                    p.post_id AS post_id,
+                    p.seq,
+                    p.post_id,
                     p.author,
                     p.text,
                     p.time,
@@ -256,7 +259,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True):
                     b.name AS board
                 FROM 
                     posts AS p
-                    LEFT JOIN attachments AS a ON a.post_id = p.post_id
+                    LEFT JOIN attachments AS a ON a.post_seq = p.post_id
                     JOIN threads AS t ON p.thread_id = t.seq
                     JOIN boards AS b ON t.board_id = b.seq
                 WHERE 
@@ -297,7 +300,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True):
                 FROM 
                     posts_fts
                     JOIN posts p ON posts_fts.rowid = p.seq
-                    LEFT JOIN attachments a ON a.post_id = p.post_id
+                    LEFT JOIN attachments a ON a.post_seq = p.post_id
                     JOIN threads t ON p.thread_id = t.seq
                     JOIN boards b ON t.board_id = b.seq
                 WHERE 
@@ -328,6 +331,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True):
                     posts[pid]["files"].append({
                         "url": r["file_url"],
                         "thumb": r["thumb_url"],
+                        "file_name": r["file_name"],
                         "file_type": r["file_type"],
                         "file_data": r["file_data"]
                     })
