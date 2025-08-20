@@ -9,41 +9,23 @@ from loguru import logger as log
 from pathlib import Path
 from bs4 import BeautifulSoup
 
-def _test_thread(url: str):
-    try:
-        r = requests.get(url, timeout=10)
-    except Exception as e:
-        log.error(f"r ex: {e}")
-
-    if r:
-        log.info(url)
-        try: 
-            conv_r = yk_parse_thread(r.text)
-        except Exception as e:
-            log.error(f"conv ex: {e}")
-            return
-        pp(conv_r)
-
-def _test_catalog(url: str):
-    try:
-        r = requests.get(url, timeout=10)
-    except Exception as e:
-        log.error(f"r ex: {e}")
-
-    if r:
-        log.info(url)
-        try: 
-            conv_r = yk_parse_catalog(r.text)
-        except Exception as e:
-            log.error(f"conv ex: {e}")
-            return
-        pp(conv_r)
-
-#_test_thread("http://ii.yakuji.moe/b/res/4886591.html")
-#_test_catalog('http://ii.yakuji.moe/b/')
-
-def yakuify(url):
-    return ''.join(['http://ii.yakuji.moe',url])
+aria2c_args = [
+    'aria2c',
+    '--max-connection-per-server=5',
+    '--max-concurrent-downloads=5',
+    '--auto-file-renaming=false',
+    '--remote-time=true',
+    '--log-level=error',
+    '--console-log-level=error',
+    '--download-result=hide',
+    '--summary-interval=0',
+    '--file-allocation=none',
+    '--continue=true',
+    '--check-certificate=false', 
+    '--allow-overwrite=false',
+    '--quiet=true',
+    '-Z'
+]
 
 boards = [
     ['d',     'Работа сайта'],
@@ -102,6 +84,9 @@ boards = [
 ]
 
 sfxs = [x[0] for x in boards]
+
+def yakuify(url):
+    return ''.join(['http://ii.yakuji.moe',url])
 
 def board_menu():
     with ui.button(icon='menu'):
@@ -312,22 +297,186 @@ def html2db(dump_path='b', db_path='ii.db'):
 
         log.info(f"{item.name}: {i} of {len(threads)} ")
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='yk parser')
+def dump(board_url, from_to):
+    import os
+    import subprocess
 
-    parser.add_argument('brd_dir', type=str, help='''
-        input dir with thread folders 
+    def dump_thread(thread_url, board_sfx):
+        img_urls = []
+
+        while True:
+            try:
+                r = requests.get(thread_url)
+                break
+            except Exception as e:
+                err(f"dump_thread: {e}")
+
+        soup = BeautifulSoup(r.text, "html.parser")
+        htm_urls = [x.get('href') for x in soup.find_all("a") if x.get('href') is not None]
+        
+        for htm in htm_urls:
+            if not htm.startswith(f'/{board_sfx}/src/'):
+                continue
+
+            if not htm.endswith(util.via_exts): # /azu/src/1316779210367.jpg
+                continue
+
+            img_urls.append('http://ii.yakuji.moe' + htm)
+    
+        img_urls = list(set(img_urls)) # remove duplicates
+        img_urls.append(thread_url)
+
+        subprocess.run(aria2c_args + img_urls)
+
+    if 'html' in board_url: # 'http://ii.yakuji.moe/azu/5.html'
+        board_url = os.path.dirname(board_url) # 'http://ii.yakuji.moe/azu'
+
+    board_sfx = board_url[board_url.rfind("/")+1:] # azu
+
+    fr, to = from_to.split('-')
+    gate = [x for x in range(int(fr), int(to))]
+
+    soup = BeautifulSoup(requests.get(board_url).text, "html.parser")
+    
+    page_sfx = ['index.html'] # num of pages
+    for sp in soup.find_all("a"):
+        if '.html' not in str(sp):
+            continue
+            
+        if len(sp.get('href')) < 10: # 9999
+            page_sfx.append(sp.get('href'))
+
+    threads = []
+    
+    #for sfx in page_sfx: # todo enumerate
+    for i, sfx in enumerate(page_sfx):
+        if i not in gate:
+            continue
+        
+        while True:
+            try:
+                r = requests.get(f'{board_url}/{sfx}')
+                break
+            except Exception as e:
+                err(f"dump: {e}")
+
+        soup = BeautifulSoup(r.text, "html.parser")
+        htm_links = [x.get('href') for x in soup.find_all("a") if x.get('href') is not None] 
+
+        for htm in htm_links:
+            if htm.startswith('./res/') and htm.endswith('.html'): #'./res/10992.html'
+                threads.append(board_url + htm[1:])
+
+        log.info(f'{i + 1} / {len(page_sfx)}, {len(threads)} found', end = '\r')
+
+    os.makedirs(board_sfx, exist_ok=True)
+    os.chdir(board_sfx)
+
+    for ii, thread in enumerate(threads):
+        log.info(f'{ii + 1} / {len(threads) }, {thread}', end = '      \n')
+
+        num = thread[thread.rfind('/')+1:-5]
+        os.makedirs(num, exist_ok=True)
+
+        os.chdir(num)
+        dump_thread(thread, board_sfx)
+        os.chdir('..')
+
+    os.chdir('..')
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description='ii.yakuji.moe tools')
+
+    g = ap.add_argument_group("html2db options")
+    
+    g.add_argument('--th', type=str, help='''
+        [toggle] input dir with thread folders 
         (<board_prefix>/<thread_id>/<thread_id>.html, 
-        b/1182145/1182145.html)'''
+        b/1182145/1182145.html)
+        '''
+    )
+    g.add_argument('--db', type=str, help='database output file (*.db)')
+    g.add_argument('--recreate', action="store_true", default=False, help='rewrite db')
+    g.add_argument('--files', action="store_true", default=False, help='add file blobs to db')
+
+    g = ap.add_argument_group("dumper options")
+
+    g.add_argument('--url', type=str, help='''
+        [toggle] url to dump 
+        (http://ii.yakuji.moe/azu)
+        '''
+    )
+    g.add_argument('--range', type=str, default='0-9999', help='''
+        pages to dump, default 0-9999
+        (from-to, 0-5, 20-30)
+        '''
     )
 
-    parser.add_argument('db_file', type=str, help='database file (*.db)')
+    args = ap.parse_args()
 
-    parser.add_argument('--recreate', action="store_true", default=False, help='rewrite db')
-    parser.add_argument('--files', action="store_true", default=False, help='add file blobs to db')
+    if args.url:
+        dump(board_url=args.url, from_to=args.range)
 
-    args = parser.parse_args()
+    if args.th:
+        if not args.db:
+            p = Path(args.th)
+            args.db = '%s.db' % p.name
 
-    html2db(dump_path=args.brd_dir, db_path=args.db_file)
+        html2db(dump_path=args.th, db_path=args.db)
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def _test_thread(url: str):
+    try:
+        r = requests.get(url, timeout=10)
+    except Exception as e:
+        log.error(f"r ex: {e}")
+
+    if r:
+        log.info(url)
+        try: 
+            conv_r = parse_thread(r.text)
+        except Exception as e:
+            log.error(f"conv ex: {e}")
+            return
+        pp(conv_r)
+
+def _test_catalog(url: str):
+    try:
+        r = requests.get(url, timeout=10)
+    except Exception as e:
+        log.error(f"r ex: {e}")
+
+    if r:
+        log.info(url)
+        try: 
+            conv_r = parse_catalog(r.text)
+        except Exception as e:
+            log.error(f"conv ex: {e}")
+            return
+        pp(conv_r)
+
+#_test_thread("http://ii.yakuji.moe/b/res/4886591.html")
+#_test_catalog('http://ii.yakuji.moe/b/')
