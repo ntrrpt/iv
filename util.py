@@ -62,6 +62,10 @@ def pp(data):
     s = str(pprint.pformat(str(data)))
     print(s)
 
+def pf(data):
+    s = str(pprint.pformat(str(data)))
+    return s
+
 def die(s=''):
     if s:
         log.critical(str(s))

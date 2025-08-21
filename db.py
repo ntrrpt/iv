@@ -340,7 +340,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True, BOARDS=[]):
         log.trace(f"{TEXT}: {len(r)} in {str(sw)}")
 
         return count, r
-
+'''
 def find_blob_by_post(db, post_id):
     file_data = b''
 
@@ -357,6 +357,67 @@ def find_blob_by_post(db, post_id):
 
         return file_data
     
-'''if __name__ == "__main__":
+if __name__ == "__main__":
     r = find_blob_by_post('yk.db', 7904)
     print(r)'''
+
+q = """
+    SELECT
+        p.seq,
+        p.post_id,
+        p.author,
+        p.text,
+        p.time,
+        a.file_url,
+        a.file_name,
+        a.thumb_url,
+        a.file_type,
+        a.file_data,
+        b.name AS board
+    FROM 
+        posts_fts
+        JOIN posts p ON posts_fts.rowid = p.seq
+        LEFT JOIN attachments a ON a.post_seq = p.post_id
+        JOIN threads t ON p.thread_id = t.seq
+        JOIN boards b ON t.board_id = b.seq
+    WHERE 
+        posts_fts MATCH ?
+        ORDER BY p.seq ASC
+        LIMIT ? OFFSET ?;
+"""
+
+def stats(db: str):
+    with sqlite3.connect(db) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        q = """
+            SELECT 
+                b.seq AS board_id,
+                b.name AS board_name,
+                (SELECT COUNT(*) FROM threads t WHERE t.board_id = b.seq) AS threads_count,
+                (SELECT COUNT(*) FROM posts p WHERE p.board_id = b.seq) AS posts_count,
+                (SELECT COUNT(*) FROM attachments a 
+                    JOIN posts p ON a.post_seq = p.seq 
+                    WHERE p.board_id = b.seq) AS attachments_count,
+                (SELECT t.title FROM threads t 
+                    WHERE t.board_id = b.seq 
+                    ORDER BY t.seq DESC 
+                    LIMIT 1) AS last_thread_title,
+                (SELECT MAX(p.time) FROM posts p WHERE p.board_id = b.seq) AS last_post_time,
+                (SELECT MIN(p.time) FROM posts p WHERE p.board_id = b.seq) AS first_post_time
+            FROM boards b
+            WHERE EXISTS (SELECT 1 FROM threads t WHERE t.board_id = b.seq)
+            ORDER BY b.seq;
+        """
+
+        cur = conn.cursor()
+        cur.execute(q)
+
+        r = [dict(row) for row in cur.fetchall()]
+
+        return r
+
+if __name__ == "__main__":
+    r = stats('test.db')
+    print(r)

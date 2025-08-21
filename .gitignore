@@ -6,6 +6,9 @@ dist/
 wheels/
 *.egg-info
 
+# app storage
+.nicegui
+
 # Virtual environments
 .venv
 

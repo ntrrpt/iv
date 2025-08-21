@@ -229,91 +229,12 @@ def render_post(post, disable_menu=False):
             ui.separator()
             ui.html(render_post_text(post["text"])).style("line-height: 1;")
 
-@ui.page('/search')
-async def db_search():
-    if not args.db:
-        raise HTTPException(status_code=404, detail='--db not enabled')
-
-    def draw(page=0):
-        limit = int(posts_on_page.value)
-        offset = limit*page
-        q = str(query.value)
-        sw = Stopwatch(2)
-        
-        try:
-            sw.restart()
-            count, posts = db.find_posts_by_text(
-                args.db, 
-                q, 
-                FTS=fts_checkbox.value,
-                LIMIT=limit, 
-                OFFSET=offset
-            )
-            sw.stop()
-        except Exception as ex:
-            ui.notify(f"query err: {str(ex)}", type='negative', position='top')
-            return
-
-        ui.notify(
-            f"{q}: {count} posts in {str(sw)}, {len(posts)} displayed", 
-            type='positive', 
-            position='top'
-        )
-
-        results.clear()
-
-        ui.run_javascript('window.scrollTo(0, 0);')
-
-        with results:
-            for post in posts:
-                render_post(post)
-
-        page_buttons.clear()
-        if limit >= count:
-            return
-
-        with page_buttons:
-            pages = int(count / limit) + 1
-
-            for i in range(min(10, pages)):
-                ui.button(i, on_click=lambda e, ii=i: (draw(ii)), color='green' if i == page else 'primary')
-
-            if pages > 10:
-                with ui.dropdown_button():
-                    with ui.row().classes('w-full items-start bg-gray-100 rounded p-1 gap-1'):
-                        for i in range(10, pages):
-                            ui.button(i, on_click=lambda e, ii=i: (draw(ii)), color='green' if i == page else 'primary') 
-
-    with ui.header().classes('bg-blue-900 text-white').classes('p-1.5 gap-1.5 self-center transition-all'):
-        search = ui.button(color='orange-8', icon='search')
-
-        query = ui.input(label='search query'). \
-            props('autofocus outlined dense'). \
-            classes('bg-gray-100')
-
-        query.on('keydown.enter', lambda e: (draw()))
-        
-        search.on('click', lambda e: (draw()))
-
-        posts_on_page = ui.number(label='posts on page', value=50, format='%d').props('autofocus outlined dense').classes('bg-gray-100 w-32')
-        posts_on_page.on('keydown.enter', lambda e: (draw()))
-
-        fts_checkbox = ui.checkbox('FTS5', value=True)
-
-        ui.space()
-
-        page_buttons = ui.button_group().props('outline')
-
-    results = ui.column()
-
 @ui.page('/db/{board}')
 async def db_catalog(board: str):
     if not args.db:
         raise HTTPException(status_code=404, detail='--db not enabled')
 
     log.info(board)
-
-    ui.label(f"^____^ catalog")
 
 @ui.page('/db/{board}/{thread_id}')
 async def db_thread(board: str, thread_id: int):
@@ -355,7 +276,7 @@ async def db_thread(board: str, thread_id: int):
             pages = int(len(thread['posts']) / limit) + 1
 
             for i in range(min(10, pages)):
-                ui.button(i, on_click=lambda e, ii=i: (draw(ii)), color='green' if i == page else 'primary')
+                b = ui.button(i, on_click=lambda e, ii=i: (draw(ii)), color='green' if i == page else 'primary')
 
             if pages > 10:
                 with ui.dropdown_button():
@@ -374,7 +295,11 @@ async def db_thread(board: str, thread_id: int):
         refresh = ui.button(color='orange-8', icon='refresh')
         refresh.on('click', lambda e: (draw()))
 
-        posts_on_page = ui.number(label='posts on page', value=50, format='%d').props('autofocus outlined dense').classes('bg-gray-100 w-32')
+        posts_on_page = ui.number(label='posts per page', value=50, format='%d') \
+            .props('autofocus outlined dense') \
+            .classes('bg-gray-100 w-32') \
+            .bind_value(app.storage.user, 'ppp_thread')
+
         posts_on_page.on('keydown.enter', lambda e: (draw()))
 
         ui.space()
@@ -391,14 +316,119 @@ async def db_thread(board: str, thread_id: int):
         scroll_to_post(thread_id)
 
 @ui.page('/')
-async def index():
-    ui.label("hai").classes('text-xl font-bold mb-4')
+async def db_search():
+    if not args.db:
+        raise HTTPException(status_code=404, detail='--db not enabled')
+
+    def draw(page=0):
+        limit = int(posts_on_page.value)
+        offset = limit*page
+        q = str(query.value)
+        sw = Stopwatch(2)
+        
+        try:
+            sw.restart()
+            count, posts = db.find_posts_by_text(
+                args.db, 
+                q, 
+                FTS=fts_checkbox.value,
+                LIMIT=limit, 
+                OFFSET=offset
+            )
+            sw.stop()
+        except Exception as ex:
+            ui.notify(f"query err: {str(ex)}", type='negative', position='top')
+            return
+
+        ui.notify(
+            f"{q}: {count} posts in {str(sw)}, {len(posts)} displayed", 
+            type='positive', 
+            position='top'
+        )
+
+        results_column.clear()
+        stats_row.clear()
+
+        ui.run_javascript('window.scrollTo(0, 0);')
+
+        with results_column:
+            for post in posts:
+                render_post(post)
+
+        page_buttons.clear()
+        if limit >= count:
+            return
+
+        with page_buttons:
+            pages = int(count / limit) + 1
+
+            for i in range(min(10, pages)):
+                ui.button(i, on_click=lambda e, ii=i: (draw(ii)), color='green' if i == page else 'primary')
+
+            if pages > 10:
+                with ui.dropdown_button():
+                    with ui.row().classes('w-full items-start bg-gray-100 rounded p-1 gap-1'):
+                        for i in range(10, pages):
+                            ui.button(i, on_click=lambda e, ii=i: (draw(ii)), color='green' if i == page else 'primary') 
+
+    with ui.header().classes('bg-blue-900 text-white').classes('p-1.5 gap-1.5 self-center transition-all'):
+        search = ui.button(color='orange-8', icon='search')
+        search.on('click', lambda e: (draw()))
+
+        query = ui.input(label='search query'). \
+            props('autofocus outlined dense'). \
+            classes('bg-gray-100')
+
+        query.on('keydown.enter', lambda e: (draw()))
+        
+        posts_on_page = ui.number(label='posts per page', value=50, format='%d') \
+            .props('autofocus outlined dense') \
+            .classes('bg-gray-100 w-32') \
+            .bind_value(app.storage.user, 'ppp_search')
+            
+        posts_on_page.on('keydown.enter', lambda e: (draw()))
+
+        fts_checkbox = ui.checkbox('FTS5', value=True)
+
+        ui.space()
+
+        page_buttons = ui.button_group().props('outline')
+
+    results_column = ui.column()
+
+    stats_row = ui.row().style('height: 50vh; width: 100%;').classes('justify-center items-center')
+    
+    with stats_row:
+        with ui.column().style('color: black; padding: 30px; border-radius: 15px; font-size: 24px;').classes('bg-gray-500 text-white'):
+            ui.label("%s stats:" % args.db)
+
+            columns = [
+                {'name': 'board_name', 'label': 'Board', 'field': 'board_name', 'required': True, 'align': 'left'},
+                {'name': 'threads_count', 'label': 'Threads', 'field': 'threads_count', 'sortable': True},
+                {'name': 'posts_count', 'label': 'Posts', 'field': 'posts_count', 'sortable': True},
+                {'name': 'attachments_count', 'label': 'Files', 'field': 'attachments_count', 'sortable': True}
+            ]
+
+            rows = db.stats(args.db)
+
+            total = {'board_name': 'Total'}
+
+            for d in rows:
+                for k, v in d.items():
+                    if isinstance(v, (int, float)):  # суммируем только числа
+                        total[k] = total.get(k, 0) + v
+
+            rows.insert(0, total)
+
+            ui.table(columns=columns, rows=rows, row_key='name').classes('bg-gray-500 text-white')
 
 if __name__ in ["__main__", "__mp_main__"]:
     parser = argparse.ArgumentParser(description='db viewer')
     parser.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose output (traces)')
     parser.add_argument('-d', '--db', type=str, help='database file (*.db)')
+
     #todo: use base64 instead of serve_blob feature
+    
     parser.add_argument('-p', '--path', nargs='+',
         help='''
             [repeatable] dir with thread files 
@@ -415,7 +445,12 @@ if __name__ in ["__main__", "__mp_main__"]:
     if args.verbose:
         log.remove(); log.add(sys.stderr, level="TRACE")
 
-    ui.run(port=1337, title='iv', show=False)
+    ui.run(
+        port=1337, 
+        title='iv', 
+        show=False,
+        storage_secret='fgsfds'
+    )
 
     for p in args.path or []:
         log.info(f'indexing {p}')
