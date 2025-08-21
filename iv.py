@@ -357,7 +357,7 @@ async def db_search():
 
         page_buttons.clear()
 
-        stats_row.clear()
+        stats_row.delete()
 
         if limit >= count:
             return

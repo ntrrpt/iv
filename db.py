@@ -5,6 +5,8 @@ import sqlite3, os, requests, filetype
 from pprint import pprint as pp, pformat as pf
 from pathlib import Path
 
+# todo: add posts in list
+
 def init(db: str):
     schema = """
         CREATE TABLE IF NOT EXISTS boards (
@@ -222,8 +224,6 @@ def find_thread_by_post(db, post_id):
         return find_thread_by_seq(db, thread_id)
 
 def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True, BOARDS=[]):
-    # todo: fts and %non-fts% in one q ????
-
     log.warning(BOARDS)
     with sqlite3.connect(DB) as conn:
         conn.row_factory = sqlite3.Row
@@ -248,8 +248,6 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True, BOARDS=[]):
                     p.text LIKE ? COLLATE NOCASE
                     AND b.seq IN ({placeholders})
             """
-
-            log.error(q)
 
             cur.execute(q, [f"%{TEXT}%"] + BOARDS)
             r = cur.fetchall()
