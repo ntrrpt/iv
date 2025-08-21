@@ -167,7 +167,8 @@ def find_thread_by_seq(db, thread_seq):
                 JOIN boards b ON t.board_id = b.seq
             WHERE 
                 p.thread_id = ?
-                ORDER BY p.seq ASC;
+            ORDER BY 
+                p.seq ASC;
         """
 
         cur.execute(q, (thread_seq,))
@@ -222,30 +223,39 @@ def find_thread_by_post(db, post_id):
 
 def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True, BOARDS=[]):
     # todo: fts and %non-fts% in one q ????
+
+    log.warning(BOARDS)
     with sqlite3.connect(DB) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
         count = 0
 
+        placeholders = ",".join(["?"] * len(BOARDS))
+
         sw = Stopwatch(3)
         sw.restart()
 
         if not FTS:
-            q = """
+            q = f"""
                 SELECT 
                     COUNT(*) AS total_count
                 FROM 
                     posts AS p
+                    JOIN threads AS t ON p.thread_id = t.seq
+                    JOIN boards AS b ON t.board_id = b.seq
                 WHERE 
-                    p.text LIKE ? COLLATE NOCASE;
+                    p.text LIKE ? COLLATE NOCASE
+                    AND b.seq IN ({placeholders})
             """
 
-            cur.execute(q, (f"%{TEXT}%",))
+            log.error(q)
+
+            cur.execute(q, [f"%{TEXT}%"] + BOARDS)
             r = cur.fetchall()
             count = dict(r[0])['total_count']
 
-            q = """
+            q = f"""
                 SELECT
                     p.seq,
                     p.post_id,
@@ -265,27 +275,35 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True, BOARDS=[]):
                     JOIN boards AS b ON t.board_id = b.seq
                 WHERE 
                     p.text LIKE ? COLLATE NOCASE
-                    ORDER BY p.seq ASC
-                    LIMIT ? OFFSET ?;
+                    AND b.seq IN ({placeholders})
+                ORDER BY 
+                    p.seq ASC
+                LIMIT ? OFFSET ?;
             """
 
-            cur.execute(q, (f"%{TEXT}%", LIMIT, OFFSET))
+            cur.execute(q, [f"%{TEXT}%"] + BOARDS + [LIMIT, OFFSET])
         else:
-            q = """
+            q = f"""
                 SELECT 
                     COUNT(*) AS total_count
                 FROM 
                     posts_fts
                     JOIN posts p ON posts_fts.rowid = p.seq
+                    JOIN threads AS t ON p.thread_id = t.seq
+                    JOIN boards AS b ON t.board_id = b.seq
                 WHERE 
-                    posts_fts MATCH ?
+                    posts_fts
+                MATCH 
+                    ?
+                AND
+                    b.seq IN ({placeholders})
             """
 
-            cur.execute(q, (TEXT,))
+            cur.execute(q, [TEXT] + BOARDS)
             r = cur.fetchall()
             count = dict(r[0])['total_count']
 
-            q = """
+            q = f"""
                 SELECT
                     p.seq,
                     p.post_id,
@@ -306,10 +324,12 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True, BOARDS=[]):
                     JOIN boards b ON t.board_id = b.seq
                 WHERE 
                     posts_fts MATCH ?
-                    ORDER BY p.seq ASC
-                    LIMIT ? OFFSET ?;
+                    AND b.seq IN ({placeholders})
+                ORDER BY 
+                    p.seq ASC
+                LIMIT ? OFFSET ?;
             """
-            cur.execute(q, (TEXT, LIMIT, OFFSET))
+            cur.execute(q, [TEXT] + BOARDS + [LIMIT, OFFSET])
 
         sw.stop()
 
@@ -373,7 +393,3 @@ def stats(db: str):
         r = [dict(row) for row in cur.fetchall()]
 
         return r
-
-if __name__ == "__main__":
-    r = stats('test.db')
-    print(r)

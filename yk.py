@@ -318,20 +318,20 @@ def dump(board_url, from_to):
             if not htm.startswith(f'/{board_sfx}/src/'):
                 continue
 
-            if not htm.endswith(util.via_exts): # /azu/src/1316779210367.jpg
+            if not htm.endswith(util.via_exts):
                 continue
 
             img_urls.append('http://ii.yakuji.moe' + htm)
     
-        img_urls = list(set(img_urls)) # remove duplicates
+        img_urls = list(set(img_urls))
         img_urls.append(thread_url)
 
         subprocess.run(aria2c_args + img_urls)
 
-    if 'html' in board_url: # 'http://ii.yakuji.moe/azu/5.html'
-        board_url = os.path.dirname(board_url) # 'http://ii.yakuji.moe/azu'
+    if 'html' in board_url:
+        board_url = os.path.dirname(board_url)
 
-    board_sfx = board_url[board_url.rfind("/")+1:] # azu
+    board_sfx = board_url[board_url.rfind("/")+1:] # a
 
     fr, to = from_to.split('-')
     gate = [x for x in range(int(fr), int(to))]
@@ -348,7 +348,6 @@ def dump(board_url, from_to):
 
     threads = []
     
-    #for sfx in page_sfx: # todo enumerate
     for i, sfx in enumerate(page_sfx):
         if i not in gate:
             continue
@@ -364,7 +363,7 @@ def dump(board_url, from_to):
         htm_links = [x.get('href') for x in soup.find_all("a") if x.get('href') is not None] 
 
         for htm in htm_links:
-            if htm.startswith('./res/') and htm.endswith('.html'): #'./res/10992.html'
+            if htm.startswith('./res/') and htm.endswith('.html'):
                 threads.append(board_url + htm[1:])
 
         log.info(f'{i + 1} / {len(page_sfx)}, {len(threads)} found', end = '\r')
@@ -424,30 +423,7 @@ if __name__ == "__main__":
 
         html2db(dump_path=args.th, db_path=args.db)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+'''
 def _test_thread(url: str):
     try:
         r = requests.get(url, timeout=10)
@@ -480,3 +456,4 @@ def _test_catalog(url: str):
 
 #_test_thread("http://ii.yakuji.moe/b/res/4886591.html")
 #_test_catalog('http://ii.yakuji.moe/b/')
+'''

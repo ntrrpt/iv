@@ -2,7 +2,7 @@
 todo:
     - spoilers
     - cross-threads ???
-    - multiple boards (and search)
+    - goto post (with pages)
     - classes ToT
 '''
 
@@ -260,10 +260,10 @@ async def db_thread(board: str, thread_id: int):
         with results:
             chk = [x for x in range(offset, offset + limit)]
             for i, post in enumerate(thread['posts']):
-                if i in chk:
-                    print()
-                    util.pp(post)
-                    render_post(post)
+                if i not in chk:
+                    continue
+
+                render_post(post)
 
         page_buttons.clear()
 
@@ -333,7 +333,8 @@ async def db_search():
                 q, 
                 FTS=fts_checkbox.value,
                 LIMIT=limit, 
-                OFFSET=offset
+                OFFSET=offset,
+                BOARDS=board_filter._props['ticked'] # lol
             )
             sw.stop()
         except Exception as ex:
@@ -347,8 +348,7 @@ async def db_search():
         )
 
         results_column.clear()
-        stats_row.clear()
-
+        
         ui.run_javascript('window.scrollTo(0, 0);')
 
         with results_column:
@@ -356,6 +356,9 @@ async def db_search():
                 render_post(post)
 
         page_buttons.clear()
+
+        stats_row.clear()
+
         if limit >= count:
             return
 
@@ -371,7 +374,24 @@ async def db_search():
                         for i in range(10, pages):
                             ui.button(i, on_click=lambda e, ii=i: (draw(ii)), color='green' if i == page else 'primary') 
 
+    stats = db.stats(args.db)
+
     with ui.header().classes('bg-blue-900 text-white').classes('p-1.5 gap-1.5 self-center transition-all'):
+        if len(stats) > 1:
+            with ui.dropdown_button(icon='filter_alt'):
+                boards = [
+                    {'id': -1, 'label': 'all', 'children': []}
+                ]
+
+                for stat in stats:
+                    boards[0]['children'].append(
+                        {'id': stat['board_id'], 'label': stat['board_name']}
+                    )
+
+                board_filter = ui.tree(boards, label_key='label', tick_strategy='leaf') \
+                    .expand() \
+                    .tick()
+
         search = ui.button(color='orange-8', icon='search')
         search.on('click', lambda e: (draw()))
 
@@ -389,6 +409,9 @@ async def db_search():
         posts_on_page.on('keydown.enter', lambda e: (draw()))
 
         fts_checkbox = ui.checkbox('FTS5', value=True)
+
+        with fts_checkbox:
+            ui.tooltip('match whole words only')
 
         ui.space()
 
@@ -409,18 +432,18 @@ async def db_search():
                 {'name': 'attachments_count', 'label': 'Files', 'field': 'attachments_count', 'sortable': True}
             ]
 
-            rows = db.stats(args.db)
-
             total = {'board_name': 'Total'}
 
-            for d in rows:
+            for d in stats:
                 for k, v in d.items():
-                    if isinstance(v, (int, float)):  # суммируем только числа
-                        total[k] = total.get(k, 0) + v
+                    if not isinstance(v, (int, float)):
+                        continue
 
-            rows.insert(0, total)
+                    total[k] = total.get(k, 0) + v
 
-            ui.table(columns=columns, rows=rows, row_key='name').classes('bg-gray-500 text-white')
+            stats.insert(0, total)
+
+            ui.table(columns=columns, rows=stats, row_key='name').classes('bg-gray-500 text-white')
 
 if __name__ in ["__main__", "__mp_main__"]:
     parser = argparse.ArgumentParser(description='db viewer')
@@ -452,35 +475,36 @@ if __name__ in ["__main__", "__mp_main__"]:
         storage_secret='fgsfds'
     )
 
-    for p in args.path or []:
-        log.info(f'indexing {p}')
-        path = Path(p)
-        board_name = path.name
+    if __name__ not in "__main__":
+        for p in args.path or []:
+            log.info(f'indexing {p}')
+            path = Path(p)
+            board_name = path.name
 
-        if not path.exists():
-            log.error('%s doesn\'t exists' % path)
-            continue
-
-        for thread in path.iterdir():
-            if thread.is_file():
+            if not path.exists():
+                log.error('%s doesn\'t exists' % path)
                 continue
 
-            try:
-                int(thread.name)
-            except:
-                continue
-
-            if board_name not in cache_files:
-                cache_files[board_name] = {}
-
-            for file in thread.iterdir():
-                if not file.is_file() or file.suffix == '.html':
+            for thread in path.iterdir():
+                if thread.is_file():
                     continue
-                
-                file_name = file.name
-                file_path = str(file.resolve())
 
-                if file_name in cache_files[board_name]:
-                    log.critical(f'FILE DUB: {file_path}')
+                try:
+                    int(thread.name)
+                except:
+                    continue
 
-                cache_files[board_name][file_name] = file_path
+                if board_name not in cache_files:
+                    cache_files[board_name] = {}
+
+                for file in thread.iterdir():
+                    if not file.is_file() or file.suffix == '.html':
+                        continue
+                    
+                    file_name = file.name
+                    file_path = str(file.resolve())
+
+                    if file_name in cache_files[board_name]:
+                        log.critical(f'FILE DUB: {file_path}')
+
+                    cache_files[board_name][file_name] = file_path

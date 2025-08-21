@@ -23,18 +23,10 @@ for ext, mime in ext_2_mime.items():
 
 via_exts = tuple(video_exts + image_exts + audio_exts)
 
-def is_str_int(s):
-    try:
-        int(s)
-        return True
-    except ValueError:
-        return False
-
 def float_fmt(number, digits):
     return f'{number:.{digits}f}'
 
 def stamp_fmt(timestamp: int) -> str:
-    
     dt = datetime.fromtimestamp(timestamp)
     return dt.strftime("%H:%M:%S %d/%m/%Y")
 
