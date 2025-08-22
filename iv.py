@@ -2,7 +2,6 @@
 todo:
     - spoilers
     - cross-threads ???
-    - goto post (with pages)
     - classes ToT
     - green mystery libes (o)_(o)
 '''
@@ -312,10 +311,14 @@ async def db_thread(board: str, thread_id: int):
 
     results = ui.column()
 
-    draw()
-
     if thread_id != thread['posts'][0]['id']:
+        p = check_for_post(thread_id, thread['posts'])
+        idx = p['index'] or 0
+
+        draw(idx // int(posts_on_page.value))
         scroll_to_post(thread_id)
+    else:
+        draw()
 
 @ui.page('/')
 async def db_search():

@@ -51,7 +51,7 @@ def pw(path, data, end='\n'):
     log.trace(f"{path} pwd")
 
 def pp(data):
-    s = str(pprint.pformat(str(data)))
+    s = pprint.pformat(str(data))
     print(s)
 
 def pf(data):
