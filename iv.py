@@ -3,7 +3,7 @@ todo:
     - spoilers
     - cross-threads ???
     - classes ToT
-    - green mystery libes (o)_(o)
+    - green mystery lines (o)_(o)
 '''
 
 from nicegui import app, ui
@@ -18,14 +18,9 @@ import argparse, os
 import time, pprint, requests, sys, os, mimetypes, base64
 import util, db, yk
 
-pp = util.pp
-
-cache_thread = {}
 cache_files = {}
 
-color_blank = """
-    getElementById('post-%s').style.backgroundColor = '%s';
-"""
+color_blank = "getElementById('post-%s').style.backgroundColor = '%s';"
 
 '''@app.get('/blob/{board}/{filename}')
 async def serve_blob_file(board: str, filename: str):
@@ -61,30 +56,25 @@ def image_from_bytes(data: bytes, mime_type: str):
     encoded = base64.b64encode(data).decode('utf-8')
     return f'data:{mime_type};base64,{encoded}'
 
-def check_for_post(post_id: int, posts: list):
-    for post in posts:
-        if int(post['id']) == post_id:
-            return post
+def posts_by_id(posts: list):
+    return {int(p['id']): p for p in posts}
 
 def scroll_to_post(post_id: int):
-    # todo: uncurseufy
-    post = check_for_post(post_id, cache_thread[ui.context.client.id]['posts'])
+    post = app.storage.client['posts_by_id'].get(post_id)
 
     if not post:
         return
 
     ppp = app.storage.user['ppp_thread']
-    page = app.storage.user['current_page']
-    idx = post['index']
+    page = app.storage.client['page']
+    idx = post.get('index') or 0
 
     page_to = (idx-1) // int(ppp)
-
-    print(ppp, page, idx, page_to)
 
     if page == page_to:
         ui.run_javascript(f"""
             const el = document.getElementById('post-{post_id}');
-            if (el  !==  null) el.scrollIntoView({{behavior: 'smooth', block: 'start'}});
+            if (el !== null) el.scrollIntoView({{behavior: 'smooth', block: 'start'}});
         """)
     else:
         ui.navigate.to('%s' % post_id)
@@ -101,32 +91,31 @@ def render_post_text(text: str):
                 link = ui.link(line, None)
                     
                 #todo: try/raise, just blue label on non-ext posts 
-                if ui.context.client.id in cache_thread:
-                    chk = check_for_post(target_id, cache_thread[ui.context.client.id]['posts'])
-                    if chk:
-                        link.style('color: blue; cursor: pointer; text-decoration: underline;')
-                        menu = ui.menu().props('anchor="bottom start" self="top start"')
-                        menu.on('mouseleave', lambda e, m=menu: m.close())
+                target_post = app.storage.client['posts_by_id'].get(target_id)
+                if target_post:
+                    link.style('color: blue; cursor: pointer; text-decoration: underline;')
+                    menu = ui.menu().props('anchor="bottom start" self="top start"')
+                    menu.on('mouseleave', lambda e, m=menu: m.close())
 
-                        with menu:
-                            render_post(chk, disable_menu=True)
+                    with menu:
+                        render_post(target_post, disable_menu=True)
 
-                        link.on('click', lambda e, m=menu, tid=target_id: (
-                            m.close(), 
-                            scroll_to_post(tid))
-                        ).classes('text-blue-600')
+                    link.on('click', lambda e, m=menu, tid=target_id: (
+                        m.close(), 
+                        scroll_to_post(tid))
+                    ).classes('text-blue-600')
 
-                        link.on('mouseenter', lambda e, m=menu, tid=target_id: (
-                            m.open(), ui.run_javascript(
-                                color_blank % (tid, '#78E800') # green
-                            )
-                        ))
-                        
-                        link.on('mouseleave', lambda e, m=menu, tid=target_id: (
-                            m.close(), ui.run_javascript( 
-                                color_blank % (tid, '#f3f4f6') # grey
-                            )
-                        ))
+                    link.on('mouseenter', lambda e, m=menu, tid=target_id: (
+                        m.open(), ui.run_javascript(
+                            color_blank % (tid, '#78E800') # green
+                        )
+                    ))
+                    
+                    link.on('mouseleave', lambda e, m=menu, tid=target_id: (
+                        m.close(), ui.run_javascript( 
+                            color_blank % (tid, '#f3f4f6') # grey
+                        )
+                    ))
 
             except ValueError:
                 ui.label(line)
@@ -201,46 +190,44 @@ def render_post(post, disable_menu=False):
                     .style("line-height: 1;") \
                     .classes('text-sm text-gray-600 no-underline')
 
-                if ui.context.client.id in cache_thread:
-                    replies = cache_thread[ui.context.client.id]['posts']
-                    for reply in replies:
-                        if not reply['id']: # skipped
-                            continue
+                for reply in app.storage.client['posts'] or []:
+                    if not reply['id']: # skipped
+                        continue
 
-                        if '>>%s' % post["id"] not in reply['text']:
-                            continue
+                    if '>>%s' % post["id"] not in reply['text']:
+                        continue
 
-                        target_post = check_for_post(reply['id'], replies)
+                    target_post = app.storage.client['posts_by_id'].get(reply['id'])
 
-                        if not target_post:
-                            continue
+                    if not target_post:
+                        continue
+                    
+                    link = ui.link('>>%s' % reply["id"]). \
+                        style('color: blue; cursor: pointer; text-decoration: underline;')
+                        
+                    if not disable_menu:
+                        menu = ui.menu().props('anchor="bottom start" self="top start"')
+                        menu.on('mouseleave', lambda e, m=menu: m.close())
 
-                        link = ui.link('>>%s' % reply["id"]). \
-                            style('color: blue; cursor: pointer; text-decoration: underline;')
-                            
-                        if not disable_menu:
-                            menu = ui.menu().props('anchor="bottom start" self="top start"')
-                            menu.on('mouseleave', lambda e, m=menu: m.close())
+                        with menu:
+                            render_post(target_post, disable_menu=True)
 
-                            with menu:
-                                render_post(target_post, disable_menu=True)
+                        link.on('click', lambda e, m=menu, tid=target_post['id']: (
+                            m.close(), 
+                            scroll_to_post(tid))
+                        ).classes('text-blue-600')
 
-                            link.on('click', lambda e, m=menu, tid=target_post['id']: (
-                                m.close(), 
-                                scroll_to_post(tid))
-                            ).classes('text-blue-600')
-
-                            link.on('mouseenter', lambda e, m=menu, tid=target_post['id']: (
-                                m.open(), ui.run_javascript(
-                                    color_blank % (tid, '#78E800') # green
-                                ) 
-                            ))
-                            
-                            link.on('mouseleave', lambda e, m=menu, tid=target_post['id']: (
-                                m.close(), ui.run_javascript( 
-                                    color_blank % (tid, '#f3f4f6') # grey
-                                ) 
-                            ))
+                        link.on('mouseenter', lambda e, m=menu, tid=target_post['id']: (
+                            m.open(), ui.run_javascript(
+                                color_blank % (tid, '#78E800') # green
+                            ) 
+                        ))
+                        
+                        link.on('mouseleave', lambda e, m=menu, tid=target_post['id']: (
+                            m.close(), ui.run_javascript( 
+                                color_blank % (tid, '#f3f4f6') # grey
+                            ) 
+                        ))
 
             ui.separator()
             ui.html(render_post_text(post["text"])).style("line-height: 1;")
@@ -270,7 +257,7 @@ async def db_thread(board: str, thread_id: int):
         log.warning(s); raise HTTPException(status_code=404, detail=s)
 
     def draw(page=0):
-        app.storage.user['current_page'] = page
+        app.storage.client['page'] = page
 
         limit = int(posts_on_page.value)
         offset = page*limit
@@ -305,6 +292,8 @@ async def db_thread(board: str, thread_id: int):
                             ui.button(i, on_click=lambda e, ii=i: (draw(ii)), color='green' if i == page else 'primary')
 
     with ui.header().classes('bg-blue-900 text-white').classes('p-1.5 gap-1.5 self-center transition-all'):
+        ui.button(icon='home', on_click=lambda: ui.navigate.to('/')).classes('w-11 h-11')
+
         with ui.column().style('margin-top: -0.5em;'):
             title = thread['title'] or f"{board}/{thread_id}"
             ui.label(title).classes('text-xl font-bold')
@@ -312,7 +301,7 @@ async def db_thread(board: str, thread_id: int):
 
         ui.space()
 
-        refresh = ui.button(color='orange-8', icon='refresh')
+        refresh = ui.button(color='orange-8', icon='refresh').classes('h-10')
         refresh.on('click', lambda e: (draw()))
 
         posts_on_page = ui.number(label='posts per page', value=50, format='%d') \
@@ -324,15 +313,16 @@ async def db_thread(board: str, thread_id: int):
 
         ui.space()
 
-        page_buttons = ui.button_group().props('outline')
+        page_buttons = ui.button_group().props('outline').classes('h-10')
 
-    cache_thread[ui.context.client.id] = thread.copy()
+    app.storage.client['posts'] = thread['posts'].copy()
+    app.storage.client['posts_by_id'] = posts_by_id(app.storage.client['posts'])
 
     results = ui.column()
 
     if thread_id != thread['posts'][0]['id']:
-        p = check_for_post(thread_id, thread['posts'])
-        idx = p['index'] or 0
+        p = app.storage.client['posts_by_id'].get(thread_id)
+        idx = p.get('index') or 1
 
         draw((idx-1) // int(posts_on_page.value))
         scroll_to_post(thread_id)
@@ -361,6 +351,8 @@ async def db_search():
                 BOARDS=board_filter._props['ticked'] # lol
             )
             sw.stop()
+            app.storage.client['posts'] = posts.copy()
+            app.storage.client['posts_by_id'] = posts_by_id(app.storage.client['posts'])
         except Exception as ex:
             ui.notify(f"query err: {str(ex)}", type='negative', position='top')
             return
@@ -391,7 +383,7 @@ async def db_search():
             pages = int(count / limit) + 1
 
             for i in range(min(10, pages)):
-                ui.button(i, on_click=lambda e, ii=i: (draw(ii)), color='green' if i == page else 'primary')
+                ui.button(i, on_click=lambda e, ii=i: (draw(ii)), color='green' if i == page else 'primary').classes('h-10')
 
             if pages > 10:
                 with ui.dropdown_button():
@@ -403,7 +395,7 @@ async def db_search():
 
     with ui.header().classes('bg-blue-900 text-white').classes('p-1.5 gap-1.5 self-center transition-all'):
         if len(stats) > 1:
-            with ui.dropdown_button(icon='filter_alt'):
+            with ui.dropdown_button(icon='filter_alt').classes('h-10'):
                 boards = [
                     {'id': -1, 'label': 'all', 'children': []}
                 ]
@@ -417,7 +409,7 @@ async def db_search():
                     .expand() \
                     .tick()
 
-        search = ui.button(color='orange-8', icon='search')
+        search = ui.button(color='orange-8', icon='search').classes('h-10')
         search.on('click', lambda e: (draw()))
 
         query = ui.input(label='search query'). \
