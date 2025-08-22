@@ -6,6 +6,7 @@ import pathlib
 import sys
 import pprint
 import shutil
+import base64
 
 ext_2_mime = mimetypes.types_map
 mime_2_ext = {}
@@ -26,6 +27,13 @@ for ext, mime in ext_2_mime.items():
         audio_exts.append(ext)
 
 via_exts = [video_exts + image_exts + audio_exts]
+
+def posts_by_id(posts: list):
+    return {int(p['id']): p for p in posts}
+
+def image_from_bytes(data: bytes, mime_type: str):
+    encoded = base64.b64encode(data).decode('utf-8')
+    return f'data:{mime_type};base64,{encoded}'
 
 def float_fmt(number, digits):
     return f'{number:.{digits}f}'

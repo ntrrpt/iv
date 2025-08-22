@@ -5,8 +5,6 @@ import sqlite3, os, requests, filetype
 from pprint import pprint as pp, pformat as pf
 from pathlib import Path
 
-# todo: add posts in list
-
 def init(db: str):
     schema = """
         CREATE TABLE IF NOT EXISTS boards (
@@ -102,10 +100,6 @@ def add_thread(db, board_id, first_id, title):
         return cur.lastrowid
 
 def add_posts(db, board_id, thread_id, posts=[], path=''):
-    if not posts:
-        log.error('no posts lole')
-        return
-
     with sqlite3.connect(db) as conn:
         cur = conn.cursor()
 
@@ -173,6 +167,16 @@ def find_board_by_name(db, name):
             board_id = r[0]
     return board_id
 
+def find_file_by_seq(db, post_seq):
+    with sqlite3.connect(db) as conn:
+        cur = conn.cursor()
+
+        q = "SELECT file_type, file_data FROM attachments WHERE seq = ?"
+        cur.execute(q, (post_seq,))
+        r = cur.fetchone()
+
+    return r if r else None
+
 def find_thread_by_seq(db, board_id, thread_seq):
     with sqlite3.connect(db) as conn:
         conn.row_factory = sqlite3.Row
@@ -187,6 +191,7 @@ def find_thread_by_seq(db, board_id, thread_seq):
                 p.author,
                 p.text,
                 p.time,
+                a.seq AS file_seq,
                 a.file_url,
                 a.file_name,
                 a.thumb_url,
@@ -224,11 +229,12 @@ def find_thread_by_seq(db, board_id, thread_seq):
 
                 if r["file_url"]:
                     f = {
+                        "seq": r["file_seq"],
                         "url": r["file_url"],
                         "file_name": r["file_name"],
                         "thumb": r["thumb_url"],
                         "file_type": r["file_type"],
-                        "file_data": r["file_data"]# is not None
+                        "file_data": r["file_data"] is not None
                     }
 
                     posts[pid]["files"].append(f)
@@ -269,7 +275,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True, BOARDS=[]):
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
-        count = 0
+        total_count = 0
 
         placeholders = ",".join(["?"] * len(BOARDS))
 
@@ -291,7 +297,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True, BOARDS=[]):
 
             cur.execute(q, [f"%{TEXT}%"] + BOARDS)
             r = cur.fetchall()
-            count = dict(r[0])['total_count']
+            total_count = dict(r[0])['total_count']
 
             q = f"""
                 SELECT
@@ -300,6 +306,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True, BOARDS=[]):
                     p.author,
                     p.text,
                     p.time,
+                    a.seq AS file_seq,
                     a.file_url,
                     a.file_name,
                     a.thumb_url,
@@ -339,7 +346,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True, BOARDS=[]):
 
             cur.execute(q, [TEXT] + BOARDS)
             r = cur.fetchall()
-            count = dict(r[0])['total_count']
+            total_count = dict(r[0])['total_count']
 
             q = f"""
                 SELECT
@@ -348,6 +355,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True, BOARDS=[]):
                     p.author,
                     p.text,
                     p.time,
+                    a.seq AS file_seq,
                     a.file_url,
                     a.file_name,
                     a.thumb_url,
@@ -388,17 +396,18 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True, BOARDS=[]):
                 }
                 if r["file_url"]:
                     posts[pid]["files"].append({
+                        "seq": r["file_seq"],
                         "url": r["file_url"],
                         "thumb": r["thumb_url"],
                         "file_name": r["file_name"],
                         "file_type": r["file_type"],
-                        "file_data": r["file_data"]
+                        "file_data": r["file_data"] is not None
                     })
 
         r = list(posts.values())
         log.trace(f"{TEXT}: {len(r)} in {str(sw)}")
 
-        return count, r
+        return total_count, r
 
 def stats(db: str):
     with sqlite3.connect(db) as conn:

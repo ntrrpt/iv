@@ -36,9 +36,9 @@ boards = [
     ['bro',   'My Little Pony'], # ok
     ['fr' ,   'Фурри'], # ok
     ['gf',    'GIF- и FLASH-анимация'], # ok
-    ['hr',    'Высокое разрешение'],
-    ['l',     'Литература'],
-    ['m',     'Картинки-макросы и копипаста'],
+    ['hr',    'Высокое разрешение'], # ok
+    ['l',     'Литература'], # ok
+    ['m',     'Картинки-макросы и копипаста'], # ok
     ['maid',  'Служанки'],
     ['med',   'Медицина'],
     ['mi',    'Оружие'],
@@ -61,7 +61,7 @@ boards = [
 
     ['a',     'Аниме и манга'],
     ['aa',    'Аниме-арт'],
-    ['abe',   'Old Home'],
+    ['abe',   'Old Home'], # FAIL
     ['azu',   'Azumanga Daioh'], # ok
     ['c',     'Косплей'], # ok
     ['dn',    'Death Note'],
@@ -265,7 +265,7 @@ def html2db(dump_path='b', db_path='ii.db'):
     board_id = db.find_board_by_name(db_file, board_name)
 
     if not board_id:
-        log.error(f'{board_name} is not standard board name')
+        log.error(f'{board_name}: invalid board name')
         return
         #db.add_board(db_file, board_name)
 
@@ -278,6 +278,10 @@ def html2db(dump_path='b', db_path='ii.db'):
         html_files = [
             f.name for f in item.iterdir() if f.is_file() and f.suffix == '.html'
         ]
+
+        if not html_files:
+            log.error(f'{item.name}: no html')
+            continue
 
         if len(html_files) > 1:
             log.error(f'{item.name}: too many htmls')

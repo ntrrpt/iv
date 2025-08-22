@@ -8,59 +8,62 @@ todo:
 
 from nicegui import app, ui
 from fastapi import HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import Response, FileResponse
 from contextlib import suppress
 from loguru import logger as log
 from datetime import timedelta
 from pathlib import Path
 from stopwatch import Stopwatch
 import argparse, os
-import time, pprint, requests, sys, os, mimetypes, base64
+import time, pprint, requests, sys, os, mimetypes
 import util, db, yk
 
 cache_files = {}
 
 color_blank = "getElementById('post-%s').style.backgroundColor = '%s';"
 
-'''@app.get('/blob/{board}/{filename}')
-async def serve_blob_file(board: str, filename: str):
-    if board not in cache_files:
-        s = f"board \'{board}\' not in cache_files"
+def serve_base64_file(file_seq: int):
+    blob = db.find_file_by_seq(args.db, file_seq)
+
+    if not blob:
+        log.warning(f"blob \'{file_seq}\' not found in db")
+        return ''
+
+    mime_type, image_data = blob
+    r = util.image_from_bytes(image_data, mime_type)
+
+    log.trace(f'{mime_type}: {len(image_data)}')
+
+    return r
+
+@app.get('/blob/{file_seq}')
+async def serve_blob_file(file_seq: int):
+    blob = db.find_file_by_seq(args.db, file_seq)
+
+    if not blob:
+        s = f"blob \'{file_seq}\' not found in db"
         log.warning(s)
         raise HTTPException(status_code=404, detail=s)
 
-    if filename in cache_files[board]:
-        log.trace(filename)
-        return FileResponse(cache_files[board][filename])
+    mime_type, image_data = blob
+    log.trace(f'{mime_type}: {len(image_data)}')
 
-    mime_type, image_data = result
     return Response(content=image_data, media_type=mime_type)
-
-    s = f"file \'{board}/{filename}\' not found"
-    log.warning(s)
-    raise HTTPException(status_code=404, detail=s)'''
 
 @app.get('/res/{board}/{filename}')
 async def serve_local_file(board: str, filename: str):
-    if board not in cache_files:
+    if not cache_files.get(board):
         s = f"board \'{board}\' not in cache_files"
         log.warning(s)
         raise HTTPException(status_code=404, detail=s)
 
-    if filename in cache_files[board]:
+    if cache_files.get(board).get(filename):
         log.trace(filename)
         return FileResponse(cache_files[board][filename])
 
     s = f"file \'{board}/{filename}\' not found"
     log.warning(s)
     raise HTTPException(status_code=404, detail=s)
-
-def image_from_bytes(data: bytes, mime_type: str):
-    encoded = base64.b64encode(data).decode('utf-8')
-    return f'data:{mime_type};base64,{encoded}'
-
-def posts_by_id(posts: list):
-    return {int(p['id']): p for p in posts}
 
 def scroll_to_post(post_id: int):
     post = app.storage.client['posts_by_id'].get(post_id)
@@ -75,10 +78,11 @@ def scroll_to_post(post_id: int):
     page_to = (idx-1) // int(ppp)
 
     if page == page_to:
-        ui.run_javascript(f"""
+        js = f"""
             const el = document.getElementById('post-{post_id}');
             if (el !== null) el.scrollIntoView({{behavior: 'smooth', block: 'start'}});
-        """)
+        """
+        ui.run_javascript(js)
     else:
         ui.navigate.to('%s' % post_id)
 
@@ -139,34 +143,41 @@ def render_skipped(sk: str):
 
 def render_post(post, disable_menu=False):
     rows = []
-    with (
-        ui.row() \
+    with ui.row() \
         .classes('w-full items-start bg-gray-100 rounded p-2 gap-2') \
-        .props(f'id=post-{post["id"] if not disable_menu else 'nah'}')
-    ):
+        .props(f'id=post-{post["id"] if not disable_menu else 'nah'}'):
+
         for file in post["files"] or []:
-            if file["file_data"] is not None:
-                file_url = thumb_url = image_from_bytes(file["file_data"], file["file_type"])
-            elif not cache_files:
-                file_url = file['url']
-                thumb_url = file["thumb"]
+            if file["file_data"]:
+                # found in db blobs
+                file_url = thumb_url = f'/blob/{file["seq"]}'
+                if args.base64:
+                    file_url = thumb_url = serve_base64_file(file["seq"])
+
+            elif cache_files.get(post["board"]) and cache_files.get(post["board"]).get(file['file_name']):
+                # found in cache_files
+                file_url = thumb_url = f"/res/{post["board"]}/{file['file_name']}"
             else:
-                file_url = thumb_url = f'/res/{post["board"]}/{file['file_name']}'
+                # only internets are availible
+                file_url = file["url"]
+                thumb_url = file["thumb"]
 
             with ui.dialog().props('backdrop-filter="blur(8px) brightness(40%)"') as dialog, ui.card():
                 with ui.link(target=file_url):
+
                     if file_url.endswith(tuple(util.video_exts)) or file["file_type"].startswith("video/"):
                         ui.video(file_url, autoplay=True)
 
                     elif file_url.endswith(tuple(util.image_exts)) or file["file_type"].startswith("image/"):
-                        ui.html(f'<img src="{file_url}" style="max-height: 100%; max-width: 100%;">')
-                        # because ui.image is smol
-            
+                        ui.html(f'''
+                            <img src="{file_url}" style="max-height: 100%; max-width: 100%;">
+                        ''') # because ui.image is smol
+                        
             # thumbnail
-            ui.image(thumb_url). \
-                classes("rounded"). \
-                style("width: 200px; height: auto; flex-shrink: 0;"). \
-                on('click', dialog.open)
+            ui.image(thumb_url) \
+                .classes("rounded") \
+                .style("width: 200px; height: auto; flex-shrink: 0;") \
+                .on('click', dialog.open)
             
         with ui.column().classes('flex-1').style("line-height: 1;"):
             with ui.row().classes('gap-1 items-center'):
@@ -263,7 +274,7 @@ async def db_thread(board: str, thread_id: int):
         app.storage.client['page'] = page
 
         limit = int(posts_on_page.value)
-        offset = page*limit
+        offset = page * limit
         
         results.clear()
 
@@ -319,7 +330,7 @@ async def db_thread(board: str, thread_id: int):
         page_buttons = ui.button_group().props('outline').classes('h-10')
 
     app.storage.client['posts'] = thread['posts'].copy()
-    app.storage.client['posts_by_id'] = posts_by_id(app.storage.client['posts'])
+    app.storage.client['posts_by_id'] = util.posts_by_id(app.storage.client['posts'])
 
     results = ui.column()
 
@@ -355,7 +366,7 @@ async def db_search():
             )
             sw.stop()
             app.storage.client['posts'] = posts.copy()
-            app.storage.client['posts_by_id'] = posts_by_id(app.storage.client['posts'])
+            app.storage.client['posts_by_id'] = util.posts_by_id(app.storage.client['posts'])
         except Exception as ex:
             ui.notify(f"query err: {str(ex)}", type='negative', position='top')
             return
@@ -467,11 +478,6 @@ async def db_search():
 
 if __name__ in ["__main__", "__mp_main__"]:
     parser = argparse.ArgumentParser(description='db viewer')
-    parser.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose output (traces)')
-    parser.add_argument('-d', '--db', type=str, help='database file (*.db)')
-
-    #todo: use base64 instead of serve_blob feature
-    
     parser.add_argument('-p', '--path', nargs='+',
         help='''
             [repeatable] dir with thread files 
@@ -479,6 +485,10 @@ if __name__ in ["__main__", "__mp_main__"]:
             b/1182145/1461775075639.jpg)
         '''
     )
+    parser.add_argument('-d', '--db', type=str, help='database file (*.db)')
+    parser.add_argument('--base64', action="store_true", help='use base64 instead of \'serve_blob_file\' (slower)')
+    parser.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose output (traces)')
+    
     args = parser.parse_args()
 
     if args.db and not Path(args.db).exists():
