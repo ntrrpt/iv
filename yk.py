@@ -44,44 +44,44 @@ boards = [
     ['mi',    'Оружие'], # ok
     ['mu',    'Музыка'], # ok
     ['ne',    'Животные'], # ok
-    ['o',     'Оэкаки'], 
-    ['ph',    'Фото'],
-    ['r',     'Просьбы'],
-    ['s',     'Электроника и ПО'],
-    ['sci',   'Наука'],
-    ['sp',    'Спорт'],
-    ['t',     'Торренты'],
-    ['tran',  'Иностранные языки'],
-    ['tv',    'Кино и ТВ'],
-    ['w',     'Обои'],
-    ['x',     'Паранормальные явления'],
+    ['o',     'Оэкаки'], # ok
+    ['ph',    'Фото'], # ok
+    ['r',     'Просьбы'], # ok
+    ['s',     'Электроника и ПО'], # ok
+    ['sci',   'Наука'], # ok
+    ['sp',    'Спорт'], # ok
+    ['t',     'Торренты'], # ok
+    ['tran',  'Иностранные языки'], # ok
+    ['tv',    'Кино и ТВ'], # ok
+    ['w',     'Обои'], # ok
+    ['x',     'Паранормальные явления'], # ok
 
-    ['bg',    'IIchan Archives — Настольные игры'],
-    ['vg',    'Видеоигры'],
+    ['bg',    'IIchan Archives — Настольные игры'], # ok
+    ['vg',    'Видеоигры'], # ok
 
-    ['a',     'Аниме и манга'],
-    ['aa',    'Аниме-арт'],
-    ['abe',   'Old Home'], # FAIL
+    ['a',     'Аниме и манга'], # ok
+    ['aa',    'Аниме-арт'], # ok
+    ['abe',   'Old Home'], # FAIL ########################
     ['azu',   'Azumanga Daioh'], # ok
     ['c',     'Косплей'], # ok
-    ['dn',    'Death Note'],
-    ['fi',    'Фигурки'],
-    ['hau',   'Higurashi no Naku Koro ni'],
-    ['jp',    'Япония'],
-    ['ls',    'Lucky☆Star'],
-    ['ma',    'Манга'],
-    ['me',    'Меха'],
-    ['rm',    'Rozen Maiden'],
-    ['sos',   'Suzumiya Haruhi no Yūutsu'],
-    ['tan',   'Сетевые персонажи'],
-    ['to',    'Touhou'],
-    ['vn',    'Визуальные новеллы'],
+    ['dn',    'Death Note'], # ok
+    ['fi',    'Фигурки'], # ok
+    ['hau',   'Higurashi no Naku Koro ni'], # ok
+    ['jp',    'Япония'], # ok
+    ['ls',    'Lucky☆Star'], # ok
+    ['ma',    'Манга'], # ok
+    ['me',    'Меха'], # ok
+    ['rm',    'Rozen Maiden'], # ok
+    ['sos',   'Suzumiya Haruhi no Yūutsu'], # ok
+    ['tan',   'Сетевые персонажи'], # ok
+    ['to',    'Touhou'], # ok
+    ['vn',    'Визуальные новеллы'], # ok
 
-    ['misc',  'Баннеры'],
-    ['tenma', 'Юбилейные Баннеры'],
-    ['vndev', 'Разработка визуальных новелл'],
+    ['misc',  'Баннеры'], # ok
+    ['tenma', 'Юбилейные Баннеры'], # ok
+    ['vndev', 'Разработка визуальных новелл'], # ok
 
-    ['dev',   'Работа сайта']
+    ['dev',   'Работа архива'] # FAIL ########################
 ]
 
 sfxs = [x[0] for x in boards]
@@ -108,8 +108,6 @@ def parse_time(date_str: str) -> int:
     return ts
 
 def parse_file(file_str):
-    r = {}
-
     try:
         t = file_str.find("span", class_="filesize").find("a")["href"]
         file_url = yakuify(t)
@@ -126,7 +124,7 @@ def parse_file(file_str):
             "has_blob": False
         }
     except:
-        pass
+        r = {}
 
     return r
 
@@ -320,7 +318,7 @@ def dump(board_url, from_to):
                 r = requests.get(thread_url)
                 break
             except Exception as e:
-                log.error(f"dump_thread: {e}")
+                log.error(str(e))
 
         soup = BeautifulSoup(r.text, "html.parser")
         htm_urls = [x.get('href') for x in soup.find_all("a") if x.get('href') is not None]
@@ -368,7 +366,7 @@ def dump(board_url, from_to):
                 r = requests.get(f'{board_url}/{sfx}')
                 break
             except Exception as e:
-                log.error(f"dump: {e}")
+                log.error(str(e))
 
         soup = BeautifulSoup(r.text, "html.parser")
         htm_links = [x.get('href') for x in soup.find_all("a") if x.get('href') is not None] 
