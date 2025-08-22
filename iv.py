@@ -4,6 +4,7 @@ todo:
     - cross-threads ???
     - classes ToT
     - green mystery lines (o)_(o)
+    - fix html in posts
 '''
 
 from nicegui import app, ui
@@ -15,7 +16,7 @@ from datetime import timedelta
 from pathlib import Path
 from stopwatch import Stopwatch
 import argparse, os
-import time, pprint, requests, sys, os, mimetypes
+import pprint, requests, sys, os, mimetypes
 import util, db, yk
 
 cache_files = {}

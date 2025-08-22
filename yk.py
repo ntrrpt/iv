@@ -39,12 +39,12 @@ boards = [
     ['hr',    'Высокое разрешение'], # ok
     ['l',     'Литература'], # ok
     ['m',     'Картинки-макросы и копипаста'], # ok
-    ['maid',  'Служанки'],
-    ['med',   'Медицина'],
-    ['mi',    'Оружие'],
-    ['mu',    'Музыка'],
-    ['ne',    'Животные'],
-    ['o',     'Оэкаки'],
+    ['maid',  'Служанки'], # ok
+    ['med',   'Медицина'], # ok
+    ['mi',    'Оружие'], # ok
+    ['mu',    'Музыка'], # ok
+    ['ne',    'Животные'], # ok
+    ['o',     'Оэкаки'], 
     ['ph',    'Фото'],
     ['r',     'Просьбы'],
     ['s',     'Электроника и ПО'],
@@ -399,8 +399,8 @@ if __name__ == "__main__":
 
     g = ap.add_argument_group("html2db options")
     
-    g.add_argument('--th', type=str, help='''
-        [toggle] input dir with thread folders 
+    g.add_argument('--th', nargs='+', type=str, help='''
+        [toggle] input dirs with thread folders 
         (<board_prefix>/<thread_id>/<thread_id>.html, 
         b/1182145/1182145.html)
         '''
@@ -427,12 +427,10 @@ if __name__ == "__main__":
     for url in args.url or []:
         dump(board_url=url, from_to=args.range)
 
-    if args.th:
-        if not args.db:
-            p = Path(args.th)
-            args.db = '%s.db' % p.name
+    for th in args.th or []:
+        db_file = '%s.db' % Path(th).name if not args.db else args.db
 
-        html2db(dump_path=args.th, db_path=args.db)
+        html2db(dump_path=th, db_path=db_file)
 
 '''
 def _test_thread(url: str):
