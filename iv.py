@@ -4,20 +4,20 @@ todo:
     - cross-threads ???
     - goto post (with pages)
     - classes ToT
+    - green mystery libes (o)_(o)
 '''
 
 from nicegui import app, ui
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
-
+from contextlib import suppress
 from loguru import logger as log
 from datetime import timedelta
 from pathlib import Path
+from stopwatch import Stopwatch
 import argparse, os
 import time, pprint, requests, sys, os, mimetypes, base64
 import util, db, yk
-
-from stopwatch import Stopwatch
 
 pp = util.pp
 
@@ -241,11 +241,13 @@ async def db_thread(board: str, thread_id: int):
     if not args.db:
         raise HTTPException(status_code=404, detail='--db not enabled')
 
-    if not db.find_board_by_name(args.db, board):
+    board_id = db.find_board_by_name(args.db, board)
+
+    if not board_id:
         s = f"board \'{board}\' not found"
         log.warning(s); raise HTTPException(status_code=404, detail=s)
 
-    thread = db.find_thread_by_post(args.db, thread_id)
+    thread = db.find_thread_by_post(args.db, board_id, thread_id)
 
     if not thread:
         s = f"thread \'{thread_id}\' not found"
@@ -357,7 +359,8 @@ async def db_search():
 
         page_buttons.clear()
 
-        stats_row.delete()
+        with suppress(ValueError):
+            stats_row.delete()
 
         if limit >= count:
             return

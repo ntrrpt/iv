@@ -18,8 +18,10 @@ def init(db: str):
         CREATE TABLE IF NOT EXISTS threads (
             seq INTEGER PRIMARY KEY AUTOINCREMENT,
             board_id INTEGER NOT NULL,
+            first_id INTEGER NOT NULL,
             title TEXT,
-            FOREIGN KEY(board_id) REFERENCES boards(seq)
+            FOREIGN KEY(board_id) REFERENCES boards(seq),
+            UNIQUE(board_id, first_id)
         );
 
         CREATE TABLE IF NOT EXISTS posts (
@@ -79,24 +81,59 @@ def add_board(db, name, description=''):
 
         return cur.lastrowid
 
-def add_thread(db, board_id, title):
+def add_thread(db, board_id, first_id, title):
     with sqlite3.connect(db) as conn:
         cur = conn.cursor()
 
-        q = "INSERT INTO threads (board_id, title) VALUES (?, ?)"
-        cur.execute(q, (board_id, title))
+        q = """
+            SELECT seq FROM threads WHERE board_id = ? AND first_id = ?
+        """
+
+        cur.execute(q, (board_id, first_id))
+
+        if cur.fetchone(): # dub in one board
+            log.warning(f'found dub: fid:{first_id} on bid:{board_id}')
+            return cur.lastrowid
+
+        q = "INSERT INTO threads (board_id, first_id, title) VALUES (?, ?, ?)"
+        cur.execute(q, (board_id, first_id, title))
         conn.commit()
 
         return cur.lastrowid
 
-def add_post(db, board_id, thread_id, post, path=''):
+def add_posts(db, board_id, thread_id, posts=[], path=''):
+    if not posts:
+        log.error('no posts lole')
+        return
+
     with sqlite3.connect(db) as conn:
         cur = conn.cursor()
 
-        q = "SELECT seq FROM posts WHERE post_id = ?"
-        cur.execute(q, (post['id'],))
+        for post in posts:
+            q = """
+                SELECT 
+                    p.seq 
+                FROM 
+                    posts AS p
+                    JOIN threads AS t ON p.thread_id = t.seq
+                    JOIN boards AS b ON t.board_id = b.seq
+                WHERE 
+                    post_id = ? AND b.seq = ?
+            """
 
-        if not cur.fetchone():
+            cur.execute(q, (post['id'], board_id))
+
+            if cur.fetchone(): # dub in one board
+                log.warning(f'found dub: tid:{thread_id} on bid:{board_id}')
+                continue
+
+            q = """
+                INSERT INTO posts (board_id, thread_id, post_id, author, text, time)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """
+            cur.execute(q, (board_id, thread_id, post['id'], post['author'], post['text'], post['time']))
+            post_seq = cur.lastrowid
+
             for file in post['files']:
                 file_data = None
                 file_type = file['file_type'] or None
@@ -121,13 +158,7 @@ def add_post(db, board_id, thread_id, post, path=''):
                     INSERT INTO attachments (post_seq, file_type, file_name, file_url, thumb_url, file_data)
                     VALUES (?, ?, ?, ?, ?, ?)
                 """
-                cur.execute(q, (post['id'], file_type, file_name, file['url'], file['thumb'], file_data))
-
-            q = """
-                INSERT INTO posts (board_id, thread_id, post_id, author, text, time)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """
-            cur.execute(q, (board_id, thread_id, post['id'], post['author'], post['text'], post['time']))
+                cur.execute(q,              (post_seq, file_type, file_name, file['url'], file['thumb'], file_data))
 
 def find_board_by_name(db, name):
     board_id = None
@@ -142,7 +173,7 @@ def find_board_by_name(db, name):
             board_id = r[0]
     return board_id
 
-def find_thread_by_seq(db, thread_seq):
+def find_thread_by_seq(db, board_id, thread_seq):
     with sqlite3.connect(db) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
@@ -164,16 +195,16 @@ def find_thread_by_seq(db, thread_seq):
                 b.name AS board
             FROM 
                 posts p
-                LEFT JOIN attachments a ON a.post_seq = p.post_id
+                LEFT JOIN attachments a ON a.post_seq = p.seq
                 JOIN threads t ON p.thread_id = t.seq
                 JOIN boards b ON t.board_id = b.seq
             WHERE 
-                p.thread_id = ?
+                p.thread_id = ? AND b.seq = ?
             ORDER BY 
                 p.seq ASC;
         """
 
-        cur.execute(q, (thread_seq,))
+        cur.execute(q, (thread_seq, board_id))
         
         posts = {}
         for row in cur.fetchall():
@@ -206,25 +237,34 @@ def find_thread_by_seq(db, thread_seq):
         
         return thread
 
-def find_thread_by_post(db, post_id):
+def find_thread_by_post(db, board_id, post_id):
     thread_id = 0
 
     with sqlite3.connect(db) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
-        q = "SELECT thread_id FROM posts WHERE post_id = ?"
-        cur.execute(q, (post_id,))
+        q = """
+            SELECT 
+                p.thread_id 
+            FROM 
+                posts AS p
+                JOIN threads AS t ON p.thread_id = t.seq
+                JOIN boards AS b ON t.board_id = b.seq
+            WHERE 
+                post_id = ? AND b.seq = ?
+        """
+
+        cur.execute(q, (post_id, board_id))
         r = cur.fetchone()
         
         if r:
             thread_id = r[0]
 
     if thread_id:
-        return find_thread_by_seq(db, thread_id)
+        return find_thread_by_seq(db, board_id, thread_id)
 
 def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True, BOARDS=[]):
-    log.warning(BOARDS)
     with sqlite3.connect(DB) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
@@ -268,7 +308,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True, BOARDS=[]):
                     b.name AS board
                 FROM 
                     posts AS p
-                    LEFT JOIN attachments AS a ON a.post_seq = p.post_id
+                    LEFT JOIN attachments AS a ON a.post_seq = p.seq
                     JOIN threads AS t ON p.thread_id = t.seq
                     JOIN boards AS b ON t.board_id = b.seq
                 WHERE 
@@ -317,7 +357,7 @@ def find_posts_by_text(DB, TEXT, LIMIT=50, OFFSET=0, FTS=True, BOARDS=[]):
                 FROM 
                     posts_fts
                     JOIN posts p ON posts_fts.rowid = p.seq
-                    LEFT JOIN attachments a ON a.post_seq = p.post_id
+                    LEFT JOIN attachments a ON a.post_seq = p.seq
                     JOIN threads t ON p.thread_id = t.seq
                     JOIN boards b ON t.board_id = b.seq
                 WHERE 

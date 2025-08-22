@@ -28,9 +28,9 @@ aria2c_args = [
 ]
 
 boards = [
-    ['d',     'Работа сайта'],
+    ['d',     'Работа сайта'], # ok
 
-    ['an',    'Живопись'],
+    ['an',    'Живопись'], # ok
     ['b',     'Бред'], # ok
     ['bro',   'My Little Pony'],
     ['fr' ,   'Фурри'],
@@ -288,14 +288,19 @@ def html2db(dump_path='b', db_path='ii.db'):
             html_data = f.read()
 
         thread = parse_thread(html_data)
+        if not thread['posts']:
+            log.warning('no posts lole')
+            continue
+
+        first_post_id = thread['posts'][0]['id']
+
         title = thread['title'] or ''
 
-        pos_id = db.add_thread(db_file, board_id, title)
+        thread_id = db.add_thread(db_file, board_id, first_post_id, title)
 
-        for post in thread['posts']:
-            db.add_post(db_file, board_id, pos_id, post, item if args.files else '')
+        db.add_posts(db_file, board_id, thread_id, thread['posts'], item if args.files else '')
 
-        log.info(f"{item.name}: {i} of {len(threads)} ")
+        log.info(f"{i} / {len(threads)}: {board_name}/{item.name}")
 
 def dump(board_url, from_to):
     import os
@@ -309,7 +314,7 @@ def dump(board_url, from_to):
                 r = requests.get(thread_url)
                 break
             except Exception as e:
-                err(f"dump_thread: {e}")
+                log.error(f"dump_thread: {e}")
 
         soup = BeautifulSoup(r.text, "html.parser")
         htm_urls = [x.get('href') for x in soup.find_all("a") if x.get('href') is not None]
@@ -357,7 +362,7 @@ def dump(board_url, from_to):
                 r = requests.get(f'{board_url}/{sfx}')
                 break
             except Exception as e:
-                err(f"dump: {e}")
+                log.error(f"dump: {e}")
 
         soup = BeautifulSoup(r.text, "html.parser")
         htm_links = [x.get('href') for x in soup.find_all("a") if x.get('href') is not None] 
