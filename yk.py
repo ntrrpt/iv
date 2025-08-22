@@ -1,9 +1,10 @@
 import util, db
 import requests, re, mimetypes, argparse
 import dateparser
+import subprocess
+import os
 
 import pprint
-pp = pprint.pprint
 
 from loguru import logger as log
 from pathlib import Path
@@ -34,7 +35,7 @@ boards = [
     ['b',     'Бред'], # ok
     ['bro',   'My Little Pony'], # ok
     ['fr' ,   'Фурри'], # ok
-    ['gf',    'GIF- и FLASH-анимация'],
+    ['gf',    'GIF- и FLASH-анимация'], # ok
     ['hr',    'Высокое разрешение'],
     ['l',     'Литература'],
     ['m',     'Картинки-макросы и копипаста'],
@@ -303,8 +304,9 @@ def html2db(dump_path='b', db_path='ii.db'):
         log.info(f"{i} / {len(threads)}: {board_name}/{item.name}")
 
 def dump(board_url, from_to):
-    import os
-    import subprocess
+    if not util.is_aria2c_available():
+        log.error('no aria2c detected ;C')
+        sys.exit()
 
     def dump_thread(thread_url, board_sfx):
         img_urls = []
@@ -323,7 +325,7 @@ def dump(board_url, from_to):
             if not htm.startswith(f'/{board_sfx}/src/'):
                 continue
 
-            if not htm.endswith(util.via_exts):
+            if not htm.endswith(tuple(util.exts)):
                 continue
 
             img_urls.append('http://ii.yakuji.moe' + htm)
@@ -405,9 +407,9 @@ if __name__ == "__main__":
 
     g = ap.add_argument_group("dumper options")
 
-    g.add_argument('--url', type=str, help='''
-        [toggle] url to dump 
-        (http://ii.yakuji.moe/azu)
+    g.add_argument('--url', type=str, nargs='+', help='''
+        [toggle] urls to dump 
+        (http://ii.yakuji.moe/azu http://ii.yakuji.moe/c)
         '''
     )
     g.add_argument('--range', type=str, default='0-9999', help='''
@@ -418,8 +420,8 @@ if __name__ == "__main__":
 
     args = ap.parse_args()
 
-    if args.url:
-        dump(board_url=args.url, from_to=args.range)
+    for url in args.url or []:
+        dump(board_url=url, from_to=args.range)
 
     if args.th:
         if not args.db:

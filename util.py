@@ -1,18 +1,22 @@
 from loguru import logger as log
 from datetime import datetime
+import subprocess
 import mimetypes
 import pathlib
 import sys
 import pprint
+import shutil
 
 ext_2_mime = mimetypes.types_map
 mime_2_ext = {}
 video_exts = []
 image_exts = []
 audio_exts = []
+exts = []
 
 for ext, mime in ext_2_mime.items():
     mime_2_ext[mime] = ext
+    exts.append(ext)
 
     if mime.startswith("video/"):
         video_exts.append(ext)
@@ -21,7 +25,7 @@ for ext, mime in ext_2_mime.items():
     elif mime.startswith("audio/"):
         audio_exts.append(ext)
 
-via_exts = tuple(video_exts + image_exts + audio_exts)
+via_exts = [video_exts + image_exts + audio_exts]
 
 def float_fmt(number, digits):
     return f'{number:.{digits}f}'
@@ -63,9 +67,26 @@ def die(s=''):
         log.critical(str(s))
     sys.exit()
 
+def is_aria2c_available():
+    if shutil.which("aria2c") is None:
+        return False
+    
+    try:
+        r = subprocess.run(
+            ["aria2c", "--version"], 
+            capture_output=True, 
+            text=True, 
+            check=True
+        )
+        return "aria2" in r.stdout.lower()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
 if __name__ in "__main__":
     print("%s: %s" % ('ext_2_mime', ext_2_mime))
     print("%s: %s" % ('mime_2_ext', mime_2_ext))
     print("%s: %s" % ('video_exts', video_exts))
     print("%s: %s" % ('image_exts', image_exts))
     print("%s: %s" % ('audio_exts', audio_exts))
+    print("%s: %s" % ('exts', exts))
+    

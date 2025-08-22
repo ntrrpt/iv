@@ -33,6 +33,9 @@ async def serve_blob_file(board: str, filename: str):
         log.trace(filename)
         return FileResponse(cache_files[board][filename])
 
+    mime_type, image_data = result
+    return Response(content=image_data, media_type=mime_type)
+
     s = f"file \'{board}/{filename}\' not found"
     log.warning(s)
     raise HTTPException(status_code=404, detail=s)'''
@@ -126,9 +129,9 @@ def render_post_text(text: str):
 
 def render_skipped(sk: str):
     skipped_posts, skipped_images = sk.split('/')
-    st_str = f"Пропущено {skipped_posts} сообщений."
+    st_str = f"Skipped {skipped_posts} posts."
     if int(skipped_images):
-        st_str = st_str.replace('.', f" и {skipped_images} изображений.")
+        st_str = st_str.replace('.', f" and {skipped_images} pictures.")
 
     ui.label(st_str) \
         .classes('font-bold text-sm text-gray-600') \
