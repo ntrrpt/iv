@@ -24,8 +24,7 @@ cache_thread = {}
 cache_files = {}
 
 color_blank = """
-    document.getElementById('post-%s')
-    .style.backgroundColor = '%s';
+    getElementById('post-%s').style.backgroundColor = '%s';
 """
 
 '''@app.get('/blob/{board}/{filename}')
@@ -68,10 +67,27 @@ def check_for_post(post_id: int, posts: list):
             return post
 
 def scroll_to_post(post_id: int):
-    ui.run_javascript(f"""
-        const el = document.getElementById('post-{post_id}');
-        if (el != null) el.scrollIntoView({{alignToTop: 'true', behavior: 'smooth', block: 'start'}});
-    """)
+    # todo: uncurseufy
+    post = check_for_post(post_id, cache_thread[ui.context.client.id]['posts'])
+
+    if not post:
+        return
+
+    ppp = app.storage.user['ppp_thread']
+    page = app.storage.user['current_page']
+    idx = post['index']
+
+    page_to = (idx-1) // int(ppp)
+
+    print(ppp, page, idx, page_to)
+
+    if page == page_to:
+        ui.run_javascript(f"""
+            const el = document.getElementById('post-{post_id}');
+            if (el  !==  null) el.scrollIntoView({{behavior: 'smooth', block: 'start'}});
+        """)
+    else:
+        ui.navigate.to('%s' % post_id)
 
 def render_post_text(text: str):
     html_lines = []
@@ -134,7 +150,7 @@ def render_post(post, disable_menu=False):
     with (
         ui.row() \
         .classes('w-full items-start bg-gray-100 rounded p-2 gap-2') \
-        .props(f'id=post-{post["id"]}')
+        .props(f'id=post-{post["id"] if not disable_menu else 'nah'}')
     ):
         for file in post["files"] or []:
             if file["file_data"] is not None:
@@ -201,6 +217,7 @@ def render_post(post, disable_menu=False):
 
                         link = ui.link('>>%s' % reply["id"]). \
                             style('color: blue; cursor: pointer; text-decoration: underline;')
+                            
                         if not disable_menu:
                             menu = ui.menu().props('anchor="bottom start" self="top start"')
                             menu.on('mouseleave', lambda e, m=menu: m.close())
@@ -253,6 +270,8 @@ async def db_thread(board: str, thread_id: int):
         log.warning(s); raise HTTPException(status_code=404, detail=s)
 
     def draw(page=0):
+        app.storage.user['current_page'] = page
+
         limit = int(posts_on_page.value)
         offset = page*limit
         
@@ -315,7 +334,7 @@ async def db_thread(board: str, thread_id: int):
         p = check_for_post(thread_id, thread['posts'])
         idx = p['index'] or 0
 
-        draw(idx // int(posts_on_page.value))
+        draw((idx-1) // int(posts_on_page.value))
         scroll_to_post(thread_id)
     else:
         draw()
