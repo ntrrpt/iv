@@ -7,6 +7,11 @@ todo:
     - fix html in posts
 '''
 
+cache_files = {}
+
+color_blank = "getElementById('post-%s').style.backgroundColor = '%s';"
+
+from tortoise import Tortoise
 from nicegui import app, ui
 from fastapi import HTTPException
 from fastapi.responses import Response, FileResponse
@@ -19,27 +24,11 @@ import argparse, os
 import pprint, requests, sys, os, mimetypes
 import util, db, yk
 
-cache_files = {}
+log.add('iv.txt')
 
-color_blank = "getElementById('post-%s').style.backgroundColor = '%s';"
-
-def serve_base64_file(file_seq: int):
-    blob = db.find_file_by_seq(args.db, file_seq)
-
-    if not blob:
-        log.warning(f"blob \'{file_seq}\' not found in db")
-        return ''
-
-    mime_type, image_data = blob
-    r = util.image_from_bytes(image_data, mime_type)
-
-    log.trace(f'{mime_type}: {len(image_data)}')
-
-    return r
-
-@app.get('/blob/{file_seq}')
+@app.get('/res/{file_seq}')
 async def serve_blob_file(file_seq: int):
-    blob = db.find_file_by_seq(args.db, file_seq)
+    blob = await db.find_file_by_seq(file_seq)
 
     if not blob:
         s = f"blob \'{file_seq}\' not found in db"
@@ -151,13 +140,12 @@ def render_post(post, disable_menu=False):
         for file in post["files"] or []:
             if file["file_data"]:
                 # found in db blobs
-                file_url = thumb_url = f'/blob/{file["seq"]}'
-                if args.base64:
-                    file_url = thumb_url = serve_base64_file(file["seq"])
+                file_url = thumb_url = f'/res/{file["seq"]}'
 
-            elif cache_files.get(post["board"]) and cache_files.get(post["board"]).get(file['file_name']):
+            elif cache_files.get(post["board"]) and cache_files["board"].get(file['file_name']):
                 # found in cache_files
                 file_url = thumb_url = f"/res/{post["board"]}/{file['file_name']}"
+
             else:
                 # only internets are availible
                 file_url = file["url"]
@@ -259,13 +247,13 @@ async def db_thread(board: str, thread_id: int):
     if not args.db:
         raise HTTPException(status_code=404, detail='--db not enabled')
 
-    board_id = db.find_board_by_name(args.db, board)
+    board_id = await db.find_board_by_name(board)
 
     if not board_id:
         s = f"board \'{board}\' not found"
         log.warning(s); raise HTTPException(status_code=404, detail=s)
 
-    thread = db.find_thread_by_post(args.db, board_id, thread_id)
+    thread = await db.find_thread_by_post(board_id, thread_id)
 
     if not thread:
         s = f"thread \'{thread_id}\' not found"
@@ -349,7 +337,7 @@ async def db_search():
     if not args.db:
         raise HTTPException(status_code=404, detail='--db not enabled')
 
-    def draw(page=0):
+    async def draw(page=0):
         limit = int(posts_on_page.value)
         offset = limit*page
         q = str(query.value)
@@ -357,10 +345,10 @@ async def db_search():
         
         try:
             sw.restart()
-            count, posts = db.find_posts_by_text(
-                args.db, 
+            count, posts = await db.find_posts_by_text(
                 q, 
                 FTS=fts_checkbox.value,
+                BM25=fts_checkbox.value and bm25_checkbox.value,
                 LIMIT=limit, 
                 OFFSET=offset,
                 BOARDS=board_filter._props['ticked'] # lol
@@ -406,23 +394,22 @@ async def db_search():
                         for i in range(10, pages):
                             ui.button(i, on_click=lambda e, ii=i: (draw(ii)), color='green' if i == page else 'primary') 
 
-    stats = db.stats(args.db)
+    stats = await db.stats()
 
     with ui.header().classes('bg-blue-900 text-white').classes('p-1.5 gap-1.5 self-center transition-all'):
-        if len(stats) > 1:
-            with ui.dropdown_button(icon='filter_alt').classes('h-10'):
-                boards = [
-                    {'id': -1, 'label': 'all', 'children': []}
-                ]
+        with ui.dropdown_button(icon='filter_alt').classes('h-10'):
+            boards = [
+                {'id': -1, 'label': 'all', 'children': []}
+            ]
 
-                for stat in stats:
-                    boards[0]['children'].append(
-                        {'id': stat['board_id'], 'label': stat['board_name']}
-                    )
+            for stat in stats:
+                boards[0]['children'].append(
+                    {'id': stat['board_id'], 'label': stat['board_name']}
+                )
 
-                board_filter = ui.tree(boards, label_key='label', tick_strategy='leaf') \
-                    .expand() \
-                    .tick()
+            board_filter = ui.tree(boards, label_key='label', tick_strategy='leaf') \
+                .expand() \
+                .tick()
 
         search = ui.button(color='orange-8', icon='search').classes('h-10')
         search.on('click', lambda e: (draw()))
@@ -440,10 +427,9 @@ async def db_search():
             
         posts_on_page.on('keydown.enter', lambda e: (draw()))
 
-        fts_checkbox = ui.checkbox('FTS5', value=True)
+        fts_checkbox = ui.checkbox('fts5', value=True)
 
-        with fts_checkbox:
-            ui.tooltip('match whole words only')
+        bm25_checkbox = ui.checkbox('bm25', value=False).bind_visibility_from(fts_checkbox, 'value')
 
         ui.space()
 
@@ -487,7 +473,6 @@ if __name__ in ["__main__", "__mp_main__"]:
         '''
     )
     parser.add_argument('-d', '--db', type=str, help='database file (*.db)')
-    parser.add_argument('--base64', action="store_true", help='use base64 instead of \'serve_blob_file\' (slower)')
     parser.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose output (traces)')
     
     args = parser.parse_args()
@@ -498,6 +483,10 @@ if __name__ in ["__main__", "__mp_main__"]:
 
     if args.verbose:
         log.remove(); log.add(sys.stderr, level="TRACE")
+
+    if args.db:
+        app.on_startup(db.init_db(args.db))
+        app.on_shutdown(db.close_db)
 
     ui.run(
         port=1337, 

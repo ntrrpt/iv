@@ -4,29 +4,13 @@ import dateparser
 import subprocess
 import os
 
+import oasyncio
+
 import pprint
 
 from loguru import logger as log
 from pathlib import Path
 from bs4 import BeautifulSoup
-
-aria2c_args = [
-    'aria2c',
-    '--max-connection-per-server=5',
-    '--max-concurrent-downloads=5',
-    '--auto-file-renaming=false',
-    '--remote-time=true',
-    '--log-level=error',
-    '--console-log-level=error',
-    '--download-result=hide',
-    '--summary-interval=0',
-    '--file-allocation=none',
-    '--continue=true',
-    '--check-certificate=false', 
-    '--allow-overwrite=false',
-    '--quiet=true',
-    '-Z'
-]
 
 boards = [
     ['d',     'Работа сайта'], # ok
@@ -240,7 +224,7 @@ def parse_thread(html: str) -> dict:
     thread["source"] = 'yk'
     return thread
 
-def html2db(dump_path='b', db_path='ii.db'):
+async def html2db(dump_path='b', db_path='ii.db'):
     dump_folder = Path(dump_path)
     db_file = Path(db_path)
     
@@ -249,18 +233,18 @@ def html2db(dump_path='b', db_path='ii.db'):
 
     if not db_file.is_file() or args.recreate:
         util.delete(db_file)
-        db.init(db_path)
+        db.create(db_path)
         log.success("db created!")
 
     for board in boards:
-        if db.find_board_by_name(db_file, board[0]):
+        if await db.find_board_by_name(db_file, board[0]):
             continue
 
         db.add_board(db_file, board[0], board[1])
     
     board_name = dump_folder.name
     
-    board_id = db.find_board_by_name(db_file, board_name)
+    board_id = await db.find_board_by_name(db_file, board_name)
 
     if not board_id:
         log.error(f'{board_name}: invalid board name')
@@ -335,7 +319,7 @@ def dump(board_url, from_to):
         img_urls = list(set(img_urls))
         img_urls.append(thread_url)
 
-        subprocess.run(aria2c_args + img_urls)
+        subprocess.run(util.aria2c_args + img_urls)
 
     if 'html' in board_url:
         board_url = os.path.dirname(board_url)
@@ -428,7 +412,13 @@ if __name__ == "__main__":
     for th in args.th or []:
         db_file = '%s.db' % Path(th).name if not args.db else args.db
 
-        html2db(dump_path=th, db_path=db_file)
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        loop.run_until_complete(html2db(dump_path=th, db_path=db_file))
 
 '''
 def _test_thread(url: str):

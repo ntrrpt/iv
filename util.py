@@ -8,6 +8,24 @@ import pprint
 import shutil
 import base64
 
+aria2c_args = [
+    'aria2c',
+    '--max-connection-per-server=5',
+    '--max-concurrent-downloads=5',
+    '--auto-file-renaming=false',
+    '--remote-time=true',
+    '--log-level=error',
+    '--console-log-level=error',
+    '--download-result=hide',
+    '--summary-interval=0',
+    '--file-allocation=none',
+    '--continue=true',
+    '--check-certificate=false', 
+    '--allow-overwrite=false',
+    '--quiet=true',
+    '-Z'
+]
+
 ext_2_mime = mimetypes.types_map
 mime_2_ext = {}
 video_exts = []

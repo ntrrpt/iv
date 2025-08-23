@@ -1,6 +1,6 @@
 [project]
 name = "iv"
-version = "0.1.2"
+version = "0.2.0"
 description = "(WIP) imageboard viewer"
 readme = "README.md"
 requires-python = "==3.13.*"
@@ -13,4 +13,5 @@ dependencies = [
     "pywebview==6.0",
     "requests==2.32.4",
     "stopwatch-py==2.0.1",
+    "tortoise-orm==0.25.1",
 ]
