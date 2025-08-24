@@ -35,6 +35,12 @@ async def serve_blob_file(file_seq: int):
         raise HTTPException(status_code=404, detail=s)
 
     mime_type, image_data = blob
+
+    if not image_data:
+        s = f"image_data \'{file_seq}\' == None"
+        log.warning(s)
+        raise HTTPException(status_code=404, detail=s)
+
     log.trace(f'{mime_type}: {len(image_data)}')
 
     return Response(content=image_data, media_type=mime_type)
@@ -411,17 +417,6 @@ async def db_search():
     if not stats:
         stats = await db.stats()
 
-        total = {'board_name': 'Total'}
-
-        for d in stats:
-            for k, v in d.items():
-                if not isinstance(v, (int, float)):
-                    continue
-
-                total[k] = total.get(k, 0) + v
-
-        stats.insert(0, total)
-
     with ui.header().classes('bg-blue-900 text-white').classes('p-1.5 gap-1.5 self-center transition-all'):
         with ui.dropdown_button(icon='filter_alt').classes('h-10'):
             boards = [
@@ -476,7 +471,19 @@ async def db_search():
                 {'name': 'attachments_count', 'label': 'Files', 'field': 'attachments_count', 'sortable': True}
             ]
 
-            ui.table(columns=columns, rows=stats, row_key='name').classes('bg-gray-500 text-white')
+            stats_local = stats.copy()
+            total = {'board_name': 'Total'}
+
+            for d in stats:
+                for k, v in d.items():
+                    if not isinstance(v, (int, float)):
+                        continue
+
+                    total[k] = total.get(k, 0) + v
+
+            stats_local.insert(0, total)
+
+            ui.table(columns=columns, rows=stats_local, row_key='name').classes('bg-gray-500 text-white')
 
 if __name__ in ["__main__", "__mp_main__"]:
     ap = argparse.ArgumentParser(description='db viewer')
@@ -493,16 +500,12 @@ if __name__ in ["__main__", "__mp_main__"]:
     
     args = ap.parse_args()
 
-    if args.db and not Path(args.db).exists():
-        log.error('db file doesn\'t exist')
-        sys.exit()
-
     if args.verbose:
         log.remove(); log.add(sys.stderr, level="TRACE")
 
     log.add('yk.txt')
 
-    if args.db:
+    if args.db:            
         app.on_startup(db.init(args.db))
         app.on_shutdown(db.close)
 

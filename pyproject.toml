@@ -1,10 +1,11 @@
 [project]
 name = "iv"
-version = "0.2.0"
+version = "0.3.0"
 description = "(WIP) imageboard viewer"
 readme = "README.md"
 requires-python = "==3.13.*"
 dependencies = [
+    "asyncpg>=0.30.0",
     "bs4==0.0.2",
     "dateparser==1.2.2",
     "filetype==1.2.0",

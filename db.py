@@ -12,8 +12,24 @@ from tortoise.expressions import Q, Case, When, Value
 from tortoise.functions import Count
 from tortoise.models import Model
 
-async def init(DB: str) -> None:
-    await Tortoise.init(db_url=f'sqlite://{DB}', modules={'models': ['db']})
+async def init(url: str) -> None:
+    # todo: bruhhggggg
+    if "postgresql://" in url:
+        url = url.replace("postgresql://", "postgres://")
+
+    p = Path(url)
+    if p.exists():
+        ''' local sq3 found '''
+        if p.is_absolute():
+            url = 'sqlite:///' + url
+        else:
+            url = 'sqlite://' + url
+
+    if not url.startswith(("postgres://", 'sqlite://')):
+        ''' create new db '''
+        url = 'sqlite://' + url
+
+    await Tortoise.init(db_url=url, modules={'models': ['db']})
     await Tortoise.generate_schemas()
 
 async def close() -> None:
@@ -127,8 +143,8 @@ async def find_thread_by_seq(board_id: int, thread_seq: int):
         Attachment.filter(post_seq__seq__in=list(posts_dict.keys()))
         .annotate(
             has_file_data=Case(
-                When(file_data__not_isnull=True, then=Value(True)),
-                default=Value(False)
+                When(file_data__not_isnull=True, then=Value('true')),
+                default=Value('false')
             )
         )
         .values(
@@ -150,11 +166,11 @@ async def find_thread_by_seq(board_id: int, thread_seq: int):
                 "file_name": a["file_name"],
                 "thumb": a["thumb_url"],
                 "file_type": a["file_type"],
-                "file_data": bool(a["has_file_data"])
+                "file_data": True if a["has_file_data"] == 'true' else False
             })
 
     thread_dict["posts"] = list(posts_dict.values())
-
+    log.warning(a["has_file_data"])
     return thread_dict
 
 async def find_thread_by_post(board_id: int, post_id: int):

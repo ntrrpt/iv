@@ -319,7 +319,7 @@ async def html2db(dump_path='b', db_path='ii.db'):
     if not dump_folder.exists():
         util.die('no dir')
 
-    await db.init(db_file)
+    await db.init(str(db_file))
     await db.create()
 
     for board in boards:
