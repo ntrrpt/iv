@@ -241,7 +241,7 @@ async def db_catalog(board: str):
 
     log.info(board)
 
-@ui.page('/db/{board}/{thread_id}')
+@ui.page('/db/{board}/{thread_id}', favicon="🧵")
 async def db_thread(board: str, thread_id: int):
     if not args.db:
         raise HTTPException(status_code=404, detail='--db not enabled')
@@ -266,6 +266,8 @@ async def db_thread(board: str, thread_id: int):
         
         results.clear()
 
+        refresh.props('loading')
+
         with results:
             chk = [x for x in range(offset, offset + limit)]
             for i, post in enumerate(thread['posts']):
@@ -273,6 +275,8 @@ async def db_thread(board: str, thread_id: int):
                     continue
 
                 render_post(post)
+
+        refresh.props(remove='loading')
 
         page_buttons.clear()
 
@@ -300,6 +304,7 @@ async def db_thread(board: str, thread_id: int):
             title = thread['title'] or f"{board}/{thread_id}"
             ui.label(title).classes('text-xl font-bold')
             ui.label(f"{len(thread['posts'])} posts").style('margin-top: -1em;')
+            ui.page_title(title)
 
         ui.space()
 
@@ -331,7 +336,7 @@ async def db_thread(board: str, thread_id: int):
     else:
         draw()
 
-@ui.page('/')
+@ui.page('/', favicon="🔍")
 async def db_search():
     if not args.db:
         raise HTTPException(status_code=404, detail='--db not enabled')
@@ -343,7 +348,9 @@ async def db_search():
         sw = Stopwatch(2)
         
         try:
+            search.props('loading')
             sw.restart()
+
             count, posts = await db.find_posts_by_text(
                 q,
                 FTS=fts_checkbox.value,
@@ -352,12 +359,17 @@ async def db_search():
                 OFFSET=offset,
                 BOARDS=board_filter._props['ticked'] # lol
             )
+
             sw.stop()
+            search.props(remove='loading')
+
             app.storage.client['posts'] = posts.copy()
             app.storage.client['posts_by_id'] = util.posts_by_id(app.storage.client['posts'])
         except Exception as ex:
             ui.notify(f"query err: {str(ex)}", type='negative', position='top')
             return
+
+        ui.page_title(q)
 
         ui.notify(
             f"{q}: {count} posts in {str(sw)}, {len(posts)} displayed", 
