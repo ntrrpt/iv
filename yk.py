@@ -312,15 +312,17 @@ def parse_thread(html: str) -> dict:
     thread["source"] = 'yk'
     return thread
 
-async def html2db(dump_path='b', db_path='ii.db'):
+async def html2db(dump_path='b', db_url='ii.db'):
     dump_folder = Path(dump_path)
-    db_file = Path(db_path)
     
     if not dump_folder.exists():
         util.die('no dir')
 
-    await db.init(str(db_file))
-    await db.create()
+    await db.init(db_url)
+
+    if not await db.create():
+        await db.close()
+        return
 
     for board in boards:
         if await db.find_board_by_name(board[0]):
@@ -393,8 +395,7 @@ if __name__ == "__main__":
         b/1182145/1182145.html)
         '''
     )
-    g.add_argument('--db', type=str, help='database output file (*.db)')
-    g.add_argument('--recreate', action="store_true", default=False, help='rewrite db')
+    g.add_argument('--db', type=str, help='database output url (\'postgres://\', \'sqlite://\')')
     g.add_argument('--files', action="store_true", default=False, help='add file blobs to db')
 
     g = ap.add_argument_group("dumper options")
@@ -422,16 +423,12 @@ if __name__ == "__main__":
     for url in args.url or []:
         dump(board_url=url, from_to=args.range)
 
-    if args.recreate and args.db:
-        util.delete(args.db)
-
     for path in args.path or []:
         if not args.db:
             db_file = '%s.db' % Path(path).name
-            if args.recreate:
-                util.delete(db_file)
+            db_url = "sqlite://" + db_file
         else:
-            db_file = args.db
+            db_url = args.db
 
         try:
             loop = asyncio.get_event_loop()
@@ -439,5 +436,5 @@ if __name__ == "__main__":
             loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
-        loop.run_until_complete(html2db(dump_path=path, db_path=db_file))
+        loop.run_until_complete(html2db(path, db_url))
 

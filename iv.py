@@ -21,7 +21,7 @@ import util, db, yk
 
 log.add('iv.txt')
 
-stats = {}
+db_stats = {}
 cache_files = {}
 color_blank = "getElementById('post-%s').style.backgroundColor = '%s';"
 
@@ -344,7 +344,7 @@ async def db_thread(board: str, thread_id: int):
 
 @ui.page('/', favicon="🔍")
 async def db_search():
-    global stats
+    global db_stats
 
     if not args.db:
         raise HTTPException(status_code=404, detail='--db not enabled')
@@ -377,7 +377,6 @@ async def db_search():
             ui.notify(f"query err: {str(ex)}", type='negative', position='top')
             return
         
-
         ui.page_title(q)
 
         ui.notify(
@@ -414,8 +413,8 @@ async def db_search():
                         for i in range(10, pages):
                             ui.button(i, on_click=lambda e, ii=i: (draw(ii)), color='green' if i == page else 'primary') 
 
-    if not stats:
-        stats = await db.stats()
+    if not db_stats:
+        db_stats = await db.stats()
 
     with ui.header().classes('bg-blue-900 text-white').classes('p-1.5 gap-1.5 self-center transition-all'):
         with ui.dropdown_button(icon='filter_alt').classes('h-10'):
@@ -423,7 +422,7 @@ async def db_search():
                 {'id': -1, 'label': 'all', 'children': []}
             ]
 
-            for stat in stats:
+            for stat in db_stats:
                 boards[0]['children'].append(
                     {'id': stat['board_id'], 'label': stat['board_name']}
                 )
@@ -471,10 +470,10 @@ async def db_search():
                 {'name': 'attachments_count', 'label': 'Files', 'field': 'attachments_count', 'sortable': True}
             ]
 
-            stats_local = stats.copy()
+            stats_local = db_stats.copy()
             total = {'board_name': 'Total'}
 
-            for d in stats:
+            for d in db_stats:
                 for k, v in d.items():
                     if not isinstance(v, (int, float)):
                         continue

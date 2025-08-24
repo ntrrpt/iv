@@ -12,23 +12,11 @@ from tortoise.expressions import Q, Case, When, Value
 from tortoise.functions import Count
 from tortoise.models import Model
 
+def dial():
+    conn = Tortoise.get_connection("default")
+    return conn.capabilities.dialect
+
 async def init(url: str) -> None:
-    # todo: bruhhggggg
-    if "postgresql://" in url:
-        url = url.replace("postgresql://", "postgres://")
-
-    p = Path(url)
-    if p.exists():
-        ''' local sq3 found '''
-        if p.is_absolute():
-            url = 'sqlite:///' + url
-        else:
-            url = 'sqlite://' + url
-
-    if not url.startswith(("postgres://", 'sqlite://')):
-        ''' create new db '''
-        url = 'sqlite://' + url
-
     await Tortoise.init(db_url=url, modules={'models': ['db']})
     await Tortoise.generate_schemas()
 
@@ -170,7 +158,6 @@ async def find_thread_by_seq(board_id: int, thread_seq: int):
             })
 
     thread_dict["posts"] = list(posts_dict.values())
-    log.warning(a["has_file_data"])
     return thread_dict
 
 async def find_thread_by_post(board_id: int, post_id: int):
@@ -199,7 +186,7 @@ async def find_posts_by_text(
     sw = Stopwatch(2)
     sw.restart()
 
-    if not FTS:
+    if dial() != 'sqlite' or not FTS:
         # === LIKE-search via ORM ===
         total_count = await Post.filter(
             Q(text__icontains=TEXT) & Q(thread__board_id__in=BOARDS)
@@ -364,7 +351,44 @@ async def add_posts(board_id: int, thread_id: int, posts: list = [], path: str =
             )
 
 async def create():
-    schema = """
+    postgres_schema = """
+        CREATE TABLE IF NOT EXISTS boards (
+            seq SERIAL PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            description TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS threads (
+            seq SERIAL PRIMARY KEY,
+            board_id INTEGER NOT NULL REFERENCES boards(seq),
+            first_id INTEGER NOT NULL,
+            title TEXT,
+            UNIQUE(board_id, first_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS posts (
+            seq SERIAL PRIMARY KEY,
+            board_id INTEGER NOT NULL REFERENCES boards(seq),
+            thread_id INTEGER NOT NULL REFERENCES threads(seq),
+            post_id INTEGER NOT NULL,
+            author TEXT,
+            text TEXT NOT NULL,
+            time BIGINT,
+            UNIQUE(board_id, post_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS attachments (
+            seq SERIAL PRIMARY KEY,
+            post_seq INTEGER NOT NULL REFERENCES posts(seq),
+            file_type TEXT,
+            file_name TEXT,
+            file_url TEXT,
+            thumb_url TEXT,
+            file_data BYTEA
+    );
+    """
+
+    sq3_schema = """
         CREATE TABLE IF NOT EXISTS boards (
             seq INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
@@ -422,4 +446,14 @@ async def create():
     """
 
     conn = connections.get("default")
-    await conn.execute_script(schema)
+
+    match dial():
+        case 'sqlite':
+            await conn.execute_script(sq3_schema)
+            return 'sqlite'
+        case 'postgres':
+            await conn.execute_script(postgres_schema)
+            return 'postgres'
+        case _ as dialect:
+            log.error(f'tf is {d}')
+            return False
