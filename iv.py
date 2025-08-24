@@ -21,8 +21,8 @@ import util, db, yk
 
 log.add('iv.txt')
 
+stats = {}
 cache_files = {}
-
 color_blank = "getElementById('post-%s').style.backgroundColor = '%s';"
 
 @app.get('/res/{file_seq}')
@@ -338,6 +338,8 @@ async def db_thread(board: str, thread_id: int):
 
 @ui.page('/', favicon="🔍")
 async def db_search():
+    global stats
+
     if not args.db:
         raise HTTPException(status_code=404, detail='--db not enabled')
 
@@ -405,7 +407,19 @@ async def db_search():
                         for i in range(10, pages):
                             ui.button(i, on_click=lambda e, ii=i: (draw(ii)), color='green' if i == page else 'primary') 
 
-    stats = await db.stats()
+    if not stats:
+        stats = await db.stats()
+
+        total = {'board_name': 'Total'}
+
+        for d in stats:
+            for k, v in d.items():
+                if not isinstance(v, (int, float)):
+                    continue
+
+                total[k] = total.get(k, 0) + v
+
+        stats.insert(0, total)
 
     with ui.header().classes('bg-blue-900 text-white').classes('p-1.5 gap-1.5 self-center transition-all'):
         with ui.dropdown_button(icon='filter_alt').classes('h-10'):
@@ -460,17 +474,6 @@ async def db_search():
                 {'name': 'posts_count', 'label': 'Posts', 'field': 'posts_count', 'sortable': True},
                 {'name': 'attachments_count', 'label': 'Files', 'field': 'attachments_count', 'sortable': True}
             ]
-
-            total = {'board_name': 'Total'}
-
-            for d in stats:
-                for k, v in d.items():
-                    if not isinstance(v, (int, float)):
-                        continue
-
-                    total[k] = total.get(k, 0) + v
-
-            stats.insert(0, total)
 
             ui.table(columns=columns, rows=stats, row_key='name').classes('bg-gray-500 text-white')
 
