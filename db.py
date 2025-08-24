@@ -5,13 +5,12 @@ import sqlite3, os, requests, filetype
 from pprint import pprint as pp, pformat as pf
 from pathlib import Path
 
+from tortoise import Tortoise
 from tortoise import fields, connections
 from tortoise.transactions import in_transaction
 from tortoise.expressions import Q, Case, When, Value
 from tortoise.functions import Count
 from tortoise.models import Model
-
-log.add('db.txt')
 
 async def init(DB: str) -> None:
     await Tortoise.init(db_url=f'sqlite://{DB}', modules={'models': ['db']})
@@ -62,6 +61,31 @@ class Attachment(Model):
 
     class Meta:
         table = "attachments"
+    
+async def stats():
+    q = """
+        SELECT 
+            b.seq AS board_id,
+            b.name AS board_name,
+            (SELECT COUNT(*) FROM threads t WHERE t.board_id = b.seq) AS threads_count,
+            (SELECT COUNT(*) FROM posts p WHERE p.board_id = b.seq) AS posts_count,
+            (SELECT COUNT(*) FROM attachments a
+                JOIN posts p ON a.post_seq = p.seq
+                WHERE p.board_id = b.seq) AS attachments_count,
+            (SELECT t.title FROM threads t
+                WHERE t.board_id = b.seq
+                ORDER BY t.seq DESC
+                LIMIT 1) AS last_thread_title,
+            (SELECT MAX(p.time) FROM posts p WHERE p.board_id = b.seq) AS last_post_time,
+            (SELECT MIN(p.time) FROM posts p WHERE p.board_id = b.seq) AS first_post_time
+        FROM boards b
+        WHERE EXISTS (SELECT 1 FROM threads t WHERE t.board_id = b.seq)
+        ORDER BY b.seq;
+    """
+
+    conn = connections.get("default")
+    rows = await conn.execute_query_dict(q)
+    return rows
 
 async def find_file_by_seq(post_seq: int):
     qs = Attachment.filter(seq=post_seq).values_list("file_type", "file_data", flat=False)
@@ -145,12 +169,18 @@ async def find_thread_by_post(board_id: int, post_id: int):
 
     return await find_thread_by_seq(board_id, thread_id)
 
-async def find_posts_by_text(TEXT: str, LIMIT: int = 50, OFFSET: int = 0, BM25: bool = True, FTS: bool = False, BOARDS: list[int] = []):
-    log.warning(BM25)
+async def find_posts_by_text(
+        TEXT: str, 
+        LIMIT: int = 50, 
+        OFFSET: int = 0,
+        BM25: bool = True,
+        FTS: bool = False,
+        BOARDS: list[int] = []
+    ):
     total_count = 0
     posts = []
 
-    sw = Stopwatch(3)
+    sw = Stopwatch(2)
     sw.restart()
 
     if not FTS:
@@ -262,7 +292,62 @@ async def find_posts_by_text(TEXT: str, LIMIT: int = 50, OFFSET: int = 0, BM25: 
     log.trace(f"{TEXT}: {len(posts)} in {str(sw)}")
     return total_count, posts
 
-def create(db: str):
+async def add_board(name: str, description: str = '') -> int:
+    board = await Board.create(name=name, description=description)
+    log.trace(f'board {name} created')
+    return board.seq
+
+async def add_thread(board_id: int, first_id: int, title: str) -> int:
+    existing = await Thread.filter(board_id=board_id, first_id=first_id).first()
+    if existing:
+        log.warning(f'found dub: fid:{first_id} on bid:{board_id}')
+        return existing.seq
+
+    thread = await Thread.create(board_id=board_id, first_id=first_id, title=title)
+    return thread.seq
+
+async def add_posts(board_id: int, thread_id: int, posts: list = [], path: str = ''):
+    for post in posts or []:
+        existing = await Post.filter(post_id=post['id'], board_id=board_id).first()
+        if existing:
+            log.warning(f'found dub: tid:{thread_id} on bid:{board_id}')
+            continue
+
+        new_post = await Post.create(
+            board_id=board_id,
+            thread_id=thread_id,
+            post_id=post['id'],
+            author=post.get('author'),
+            text=post.get('text', ''),
+            time=post.get('time')
+        )
+
+        for file in post.get('files', []):
+            file_data = None
+            file_type = file.get('file_type') or None
+            file_name = file['url'].split('/')[-1]
+
+            if path:
+                p = Path(path)
+                f_path_list = [f for f in p.iterdir() if f.is_file() and f.name == file_name]
+                if f_path_list:
+                    f_path = f_path_list[0]
+                    kind = filetype.guess(f_path)
+                    if kind:
+                        file_type = kind.mime
+                        with open(f_path, 'rb') as f:
+                            file_data = f.read()
+
+            await Attachment.create(
+                post_seq=new_post,
+                file_type=file_type,
+                file_name=file_name,
+                file_url=file.get('url'),
+                thumb_url=file.get('thumb'),
+                file_data=file_data
+            )
+
+async def create():
     schema = """
         CREATE TABLE IF NOT EXISTS boards (
             seq INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -320,118 +405,5 @@ def create(db: str):
         END;
     """
 
-    with sqlite3.connect(db) as conn:
-        conn.executescript(schema)
-        conn.commit()
-
-def add_board(db, name, description=''):
-    with sqlite3.connect(db) as conn:
-        cur = conn.cursor()
-
-        q = "INSERT INTO boards (name, description) VALUES (?, ?)"
-        cur.execute(q, (name, description))
-        conn.commit()
-
-        log.trace(f'board {name} created')
-
-        return cur.lastrowid
-
-def add_thread(db, board_id, first_id, title):
-    with sqlite3.connect(db) as conn:
-        cur = conn.cursor()
-
-        q = """
-            SELECT seq FROM threads WHERE board_id = ? AND first_id = ?
-        """
-
-        cur.execute(q, (board_id, first_id))
-
-        if cur.fetchone(): # dub in one board
-            log.warning(f'found dub: fid:{first_id} on bid:{board_id}')
-            return cur.lastrowid
-
-        q = "INSERT INTO threads (board_id, first_id, title) VALUES (?, ?, ?)"
-        cur.execute(q, (board_id, first_id, title))
-        conn.commit()
-
-        return cur.lastrowid
-
-def add_posts(db, board_id, thread_id, posts=[], path=''):
-    with sqlite3.connect(db) as conn:
-        cur = conn.cursor()
-
-        for post in posts:
-            q = """
-                SELECT 
-                    p.seq 
-                FROM 
-                    posts AS p
-                    JOIN threads AS t ON p.thread_id = t.seq
-                    JOIN boards AS b ON t.board_id = b.seq
-                WHERE 
-                    post_id = ? AND b.seq = ?
-            """
-
-            cur.execute(q, (post['id'], board_id))
-
-            if cur.fetchone(): # dub in one board
-                log.warning(f'found dub: tid:{thread_id} on bid:{board_id}')
-                continue
-
-            q = """
-                INSERT INTO posts (board_id, thread_id, post_id, author, text, time)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """
-            cur.execute(q, (board_id, thread_id, post['id'], post['author'], post['text'], post['time']))
-            post_seq = cur.lastrowid
-
-            for file in post['files']:
-                file_data = None
-                file_type = file['file_type'] or None
-                file_name = file['url'].split('/')[-1]
-                #file_id = int(file_name.split('.')[0])
-
-                if path:
-                    f_path = [f for f in path.iterdir() if f.is_file() and f.name == file_name]
-
-                    if f_path:
-                        f_path = f_path[0]
-                        f_abspath = f_path.resolve()
-
-                        kind = filetype.guess(f_abspath)
-                        if kind:
-                            file_type = kind.mime
-
-                            with open(f_abspath, 'rb') as f:
-                                file_data = f.read()
-
-                q = """
-                    INSERT INTO attachments (post_seq, file_type, file_name, file_url, thumb_url, file_data)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """
-                cur.execute(q,              (post_seq, file_type, file_name, file['url'], file['thumb'], file_data))
-
-async def stats():
-    q = """
-        SELECT 
-            b.seq AS board_id,
-            b.name AS board_name,
-            (SELECT COUNT(*) FROM threads t WHERE t.board_id = b.seq) AS threads_count,
-            (SELECT COUNT(*) FROM posts p WHERE p.board_id = b.seq) AS posts_count,
-            (SELECT COUNT(*) FROM attachments a
-                JOIN posts p ON a.post_seq = p.seq
-                WHERE p.board_id = b.seq) AS attachments_count,
-            (SELECT t.title FROM threads t
-                WHERE t.board_id = b.seq
-                ORDER BY t.seq DESC
-                LIMIT 1) AS last_thread_title,
-            (SELECT MAX(p.time) FROM posts p WHERE p.board_id = b.seq) AS last_post_time,
-            (SELECT MIN(p.time) FROM posts p WHERE p.board_id = b.seq) AS first_post_time
-        FROM boards b
-        WHERE EXISTS (SELECT 1 FROM threads t WHERE t.board_id = b.seq)
-        ORDER BY b.seq;
-    """
-
     conn = connections.get("default")
-    rows = await conn.execute_query_dict(q)
-    return rows
+    await conn.execute_script(schema)

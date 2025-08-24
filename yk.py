@@ -2,11 +2,12 @@ import util, db
 import requests, re, mimetypes, argparse
 import dateparser
 import subprocess
-import os
+import os, sys
+from stopwatch import Stopwatch
 
-import oasyncio
+import asyncio
 
-import pprint
+import warnings
 
 from loguru import logger as log
 from pathlib import Path
@@ -70,8 +71,95 @@ boards = [
 
 sfxs = [x[0] for x in boards]
 
+SITE = 'http://ii.yakuji.moe'
+
+
+def dump(board_url, from_to):
+    if not util.is_aria2c_available():
+        log.error('no aria2c detected ;C')
+        sys.exit()
+
+    def dump_thread(thread_url, board_sfx):
+        img_urls = []
+
+        while True:
+            try:
+                r = requests.get(thread_url)
+                break
+            except Exception as e:
+                log.error(str(e))
+
+        soup = BeautifulSoup(r.text, "html.parser")
+        htm_urls = [x.get('href') for x in soup.find_all("a") if x.get('href') is not None]
+        
+        for htm in htm_urls:
+            if not htm.startswith(f'/{board_sfx}/src/'):
+                continue
+
+            if not htm.endswith(tuple(util.exts)):
+                continue
+
+            img_urls.append('http://ii.yakuji.moe' + htm)
+    
+        img_urls = list(set(img_urls))
+        img_urls.append(thread_url)
+
+        subprocess.run(util.aria2c_args + img_urls)
+
+    if 'html' in board_url:
+        board_url = os.path.dirname(board_url)
+
+    board_sfx = board_url[board_url.rfind("/")+1:] # a
+
+    fr, to = from_to.split('-')
+    gate = [x for x in range(int(fr), int(to))]
+
+    soup = BeautifulSoup(requests.get(board_url).text, "html.parser")
+    
+    page_sfx = ['index.html'] # num of pages
+    for sp in soup.find_all("a"):
+        if '.html' in str(sp) and len(sp.get('href')) < 10: # 9999:
+            page_sfx.append(sp.get('href'))
+
+    threads = []
+    
+    for i, sfx in enumerate(page_sfx):
+        if i not in gate:
+            continue
+        
+        while True:
+            try:
+                r = requests.get(f'{board_url}/{sfx}')
+                break
+            except Exception as e:
+                log.error(str(e))
+
+        soup = BeautifulSoup(r.text, "html.parser")
+        htm_links = [x.get('href') for x in soup.find_all("a") if x.get('href') is not None] 
+
+        for htm in htm_links:
+            if htm.startswith('./res/') and htm.endswith('.html'):
+                threads.append(board_url + htm[1:])
+
+        log.info(f'{i + 1} / {len(page_sfx)}, {len(threads)} found', end = '\r')
+
+    os.makedirs(board_sfx, exist_ok=True)
+    os.chdir(board_sfx)
+
+    for ii, thread in enumerate(threads):
+        log.info(f'{ii + 1} / {len(threads) }, {thread}', end = '      \n')
+
+        num = thread[thread.rfind('/')+1:-5]
+        os.makedirs(num, exist_ok=True)
+
+        os.chdir(num)
+        dump_thread(thread, board_sfx)
+        os.chdir('..')
+
+    os.chdir('..')
+
 def yakuify(url):
-    return ''.join(['http://ii.yakuji.moe',url])
+    return ''.join([SITE, url])
 
 def board_menu():
     with ui.button(icon='menu'):
@@ -231,30 +319,30 @@ async def html2db(dump_path='b', db_path='ii.db'):
     if not dump_folder.exists():
         util.die('no dir')
 
-    if not db_file.is_file() or args.recreate:
-        util.delete(db_file)
-        db.create(db_path)
-        log.success("db created!")
+    await db.init(db_file)
+    await db.create()
 
     for board in boards:
-        if await db.find_board_by_name(db_file, board[0]):
+        if await db.find_board_by_name(board[0]):
             continue
 
-        db.add_board(db_file, board[0], board[1])
+        await db.add_board(board[0], board[1])
     
     board_name = dump_folder.name
     
-    board_id = await db.find_board_by_name(db_file, board_name)
+    board_id = await db.find_board_by_name(board_name)
 
     if not board_id:
         log.error(f'{board_name}: invalid board name')
         return
-        #db.add_board(db_file, board_name)
 
     threads = sorted(
         (p for p in dump_folder.iterdir() if p.is_dir()),
         key=lambda p: int(p.name)
     )
+
+    sw_b = Stopwatch(2)
+    sw_b.restart()
 
     for i, item in enumerate(threads, start=1):
         html_files = [
@@ -280,108 +368,26 @@ async def html2db(dump_path='b', db_path='ii.db'):
             continue
 
         first_post_id = thread['posts'][0]['id']
-
         title = thread['title'] or ''
+        thread_id = await db.add_thread(board_id, first_post_id, title)
 
-        thread_id = db.add_thread(db_file, board_id, first_post_id, title)
-
-        db.add_posts(db_file, board_id, thread_id, thread['posts'], item if args.files else '')
+        await db.add_posts(board_id, thread_id, thread['posts'], item if args.files else '')
 
         log.info(f"{i} / {len(threads)}: {board_name}/{item.name}")
 
-def dump(board_url, from_to):
-    if not util.is_aria2c_available():
-        log.error('no aria2c detected ;C')
-        sys.exit()
+    sw_b.stop()
+    log.success(f"{dump_folder}: {str(sw_b)}")
 
-    def dump_thread(thread_url, board_sfx):
-        img_urls = []
-
-        while True:
-            try:
-                r = requests.get(thread_url)
-                break
-            except Exception as e:
-                log.error(str(e))
-
-        soup = BeautifulSoup(r.text, "html.parser")
-        htm_urls = [x.get('href') for x in soup.find_all("a") if x.get('href') is not None]
-        
-        for htm in htm_urls:
-            if not htm.startswith(f'/{board_sfx}/src/'):
-                continue
-
-            if not htm.endswith(tuple(util.exts)):
-                continue
-
-            img_urls.append('http://ii.yakuji.moe' + htm)
-    
-        img_urls = list(set(img_urls))
-        img_urls.append(thread_url)
-
-        subprocess.run(util.aria2c_args + img_urls)
-
-    if 'html' in board_url:
-        board_url = os.path.dirname(board_url)
-
-    board_sfx = board_url[board_url.rfind("/")+1:] # a
-
-    fr, to = from_to.split('-')
-    gate = [x for x in range(int(fr), int(to))]
-
-    soup = BeautifulSoup(requests.get(board_url).text, "html.parser")
-    
-    page_sfx = ['index.html'] # num of pages
-    for sp in soup.find_all("a"):
-        if '.html' not in str(sp):
-            continue
-            
-        if len(sp.get('href')) < 10: # 9999
-            page_sfx.append(sp.get('href'))
-
-    threads = []
-    
-    for i, sfx in enumerate(page_sfx):
-        if i not in gate:
-            continue
-        
-        while True:
-            try:
-                r = requests.get(f'{board_url}/{sfx}')
-                break
-            except Exception as e:
-                log.error(str(e))
-
-        soup = BeautifulSoup(r.text, "html.parser")
-        htm_links = [x.get('href') for x in soup.find_all("a") if x.get('href') is not None] 
-
-        for htm in htm_links:
-            if htm.startswith('./res/') and htm.endswith('.html'):
-                threads.append(board_url + htm[1:])
-
-        log.info(f'{i + 1} / {len(page_sfx)}, {len(threads)} found', end = '\r')
-
-    os.makedirs(board_sfx, exist_ok=True)
-    os.chdir(board_sfx)
-
-    for ii, thread in enumerate(threads):
-        log.info(f'{ii + 1} / {len(threads) }, {thread}', end = '      \n')
-
-        num = thread[thread.rfind('/')+1:-5]
-        os.makedirs(num, exist_ok=True)
-
-        os.chdir(num)
-        dump_thread(thread, board_sfx)
-        os.chdir('..')
-
-    os.chdir('..')
+    await db.close()
 
 if __name__ == "__main__":
+    warnings.filterwarnings("ignore", category=DeprecationWarning) 
+
     ap = argparse.ArgumentParser(description='ii.yakuji.moe tools')
 
     g = ap.add_argument_group("html2db options")
     
-    g.add_argument('--th', nargs='+', type=str, help='''
+    g.add_argument('-p', '--path', nargs='+', type=str, help='''
         [toggle] input dirs with thread folders 
         (<board_prefix>/<thread_id>/<thread_id>.html, 
         b/1182145/1182145.html)
@@ -404,13 +410,28 @@ if __name__ == "__main__":
         '''
     )
 
+    ap.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose output (traces)')
+
     args = ap.parse_args()
+
+    if args.verbose:
+        log.remove(); log.add(sys.stderr, level="TRACE")
+
+    log.add('yk.txt')
 
     for url in args.url or []:
         dump(board_url=url, from_to=args.range)
 
-    for th in args.th or []:
-        db_file = '%s.db' % Path(th).name if not args.db else args.db
+    if args.recreate and args.db:
+        util.delete(args.db)
+
+    for path in args.path or []:
+        if not args.db:
+            db_file = '%s.db' % Path(path).name
+            if args.recreate:
+                util.delete(db_file)
+        else:
+            db_file = args.db
 
         try:
             loop = asyncio.get_event_loop()
@@ -418,39 +439,5 @@ if __name__ == "__main__":
             loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
-        loop.run_until_complete(html2db(dump_path=th, db_path=db_file))
+        loop.run_until_complete(html2db(dump_path=path, db_path=db_file))
 
-'''
-def _test_thread(url: str):
-    try:
-        r = requests.get(url, timeout=10)
-    except Exception as e:
-        log.error(f"r ex: {e}")
-
-    if r:
-        log.info(url)
-        try: 
-            conv_r = parse_thread(r.text)
-        except Exception as e:
-            log.error(f"conv ex: {e}")
-            return
-        pp(conv_r)
-
-def _test_catalog(url: str):
-    try:
-        r = requests.get(url, timeout=10)
-    except Exception as e:
-        log.error(f"r ex: {e}")
-
-    if r:
-        log.info(url)
-        try: 
-            conv_r = parse_catalog(r.text)
-        except Exception as e:
-            log.error(f"conv ex: {e}")
-            return
-        pp(conv_r)
-
-#_test_thread("http://ii.yakuji.moe/b/res/4886591.html")
-#_test_catalog('http://ii.yakuji.moe/b/')
-'''

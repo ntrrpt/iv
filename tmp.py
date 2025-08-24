@@ -21,6 +21,93 @@ async def _async_find_file_by_seq(post_seq: int):
     result = await qs  # это вернёт список словарей
     return result[0] if result else None
 
+def _add_board(db, name, description=''):
+    with sqlite3.connect(db) as conn:
+        cur = conn.cursor()
+
+        q = "INSERT INTO boards (name, description) VALUES (?, ?)"
+        cur.execute(q, (name, description))
+        conn.commit()
+
+        log.trace(f'board {name} created')
+
+        return cur.lastrowid
+
+def _add_thread(db, board_id, first_id, title):
+    with sqlite3.connect(db) as conn:
+        cur = conn.cursor()
+
+        q = """
+            SELECT seq FROM threads WHERE board_id = ? AND first_id = ?
+        """
+
+        cur.execute(q, (board_id, first_id))
+
+        if cur.fetchone(): # dub in one board
+            log.warning(f'found dub: fid:{first_id} on bid:{board_id}')
+            return cur.lastrowid
+
+        q = "INSERT INTO threads (board_id, first_id, title) VALUES (?, ?, ?)"
+        cur.execute(q, (board_id, first_id, title))
+        conn.commit()
+
+        return cur.lastrowid
+
+def _add_posts(db, board_id, thread_id, posts=[], path=''):
+    with sqlite3.connect(db) as conn:
+        cur = conn.cursor()
+
+        for post in posts:
+            q = """
+                SELECT 
+                    p.seq 
+                FROM 
+                    posts AS p
+                    JOIN threads AS t ON p.thread_id = t.seq
+                    JOIN boards AS b ON t.board_id = b.seq
+                WHERE 
+                    post_id = ? AND b.seq = ?
+            """
+
+            cur.execute(q, (post['id'], board_id))
+
+            if cur.fetchone(): # dub in one board
+                log.warning(f'found dub: tid:{thread_id} on bid:{board_id}')
+                continue
+
+            q = """
+                INSERT INTO posts (board_id, thread_id, post_id, author, text, time)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """
+            cur.execute(q, (board_id, thread_id, post['id'], post['author'], post['text'], post['time']))
+            post_seq = cur.lastrowid
+
+            for file in post['files']:
+                file_data = None
+                file_type = file['file_type'] or None
+                file_name = file['url'].split('/')[-1]
+                #file_id = int(file_name.split('.')[0])
+
+                if path:
+                    f_path = [f for f in path.iterdir() if f.is_file() and f.name == file_name]
+
+                    if f_path:
+                        f_path = f_path[0]
+                        f_abspath = f_path.resolve()
+
+                        kind = filetype.guess(f_abspath)
+                        if kind:
+                            file_type = kind.mime
+
+                            with open(f_abspath, 'rb') as f:
+                                file_data = f.read()
+
+                q = """
+                    INSERT INTO attachments (post_seq, file_type, file_name, file_url, thumb_url, file_data)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """
+                cur.execute(q,              (post_seq, file_type, file_name, file['url'], file['thumb'], file_data))
+
 def _find_board_by_name(db, name):
     board_id = None
     with sqlite3.connect(db) as conn:
@@ -33,6 +120,39 @@ def _find_board_by_name(db, name):
         if r:
             board_id = r[0]
     return board_id
+
+def _test_thread(url: str):
+    try:
+        r = requests.get(url, timeout=10)
+    except Exception as e:
+        log.error(f"r ex: {e}")
+
+    if r:
+        log.info(url)
+        try: 
+            conv_r = parse_thread(r.text)
+        except Exception as e:
+            log.error(f"conv ex: {e}")
+            return
+        pp(conv_r)
+
+def _test_catalog(url: str):
+    try:
+        r = requests.get(url, timeout=10)
+    except Exception as e:
+        log.error(f"r ex: {e}")
+
+    if r:
+        log.info(url)
+        try: 
+            conv_r = parse_catalog(r.text)
+        except Exception as e:
+            log.error(f"conv ex: {e}")
+            return
+        pp(conv_r)
+
+#_test_thread("http://ii.yakuji.moe/b/res/4886591.html")
+#_test_catalog('http://ii.yakuji.moe/b/')
 
 def _find_thread_by_seq(db, board_id, thread_seq):
     with sqlite3.connect(db) as conn:

@@ -6,11 +6,6 @@ todo:
     - green mystery lines (o)_(o)
     - fix html in posts
 '''
-
-cache_files = {}
-
-color_blank = "getElementById('post-%s').style.backgroundColor = '%s';"
-
 from tortoise import Tortoise
 from nicegui import app, ui
 from fastapi import HTTPException
@@ -25,6 +20,10 @@ import pprint, requests, sys, os, mimetypes
 import util, db, yk
 
 log.add('iv.txt')
+
+cache_files = {}
+
+color_blank = "getElementById('post-%s').style.backgroundColor = '%s';"
 
 @app.get('/res/{file_seq}')
 async def serve_blob_file(file_seq: int):
@@ -138,7 +137,7 @@ def render_post(post, disable_menu=False):
         .props(f'id=post-{post["id"] if not disable_menu else 'nah'}'):
 
         for file in post["files"] or []:
-            if file["file_data"]:
+            if file["file_data"] and not args.noblob:
                 # found in db blobs
                 file_url = thumb_url = f'/res/{file["seq"]}'
 
@@ -346,7 +345,7 @@ async def db_search():
         try:
             sw.restart()
             count, posts = await db.find_posts_by_text(
-                q, 
+                q,
                 FTS=fts_checkbox.value,
                 BM25=fts_checkbox.value and bm25_checkbox.value,
                 LIMIT=limit, 
@@ -414,9 +413,9 @@ async def db_search():
         search = ui.button(color='orange-8', icon='search').classes('h-10')
         search.on('click', lambda e: (draw()))
 
-        query = ui.input(label='search query'). \
-            props('autofocus outlined dense'). \
-            classes('bg-gray-100')
+        query = ui.input(label='search query') \
+            .props('autofocus outlined dense') \
+            .classes('bg-gray-100')
 
         query.on('keydown.enter', lambda e: (draw()))
         
@@ -464,18 +463,19 @@ async def db_search():
             ui.table(columns=columns, rows=stats, row_key='name').classes('bg-gray-500 text-white')
 
 if __name__ in ["__main__", "__mp_main__"]:
-    parser = argparse.ArgumentParser(description='db viewer')
-    parser.add_argument('-p', '--path', nargs='+',
+    ap = argparse.ArgumentParser(description='db viewer')
+    ap.add_argument('-p', '--path', type=str, nargs='+',
         help='''
             [repeatable] dir with thread files 
             (<board_prefix>/<thread_id>/<files>, 
             b/1182145/1461775075639.jpg)
         '''
     )
-    parser.add_argument('-d', '--db', type=str, help='database file (*.db)')
-    parser.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose output (traces)')
+    ap.add_argument('--db', type=str, help='database file (*.db)')
+    ap.add_argument('--noblob', action="store_true", default=False, help='disable blobs')
+    ap.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose output (traces)')
     
-    args = parser.parse_args()
+    args = ap.parse_args()
 
     if args.db and not Path(args.db).exists():
         log.error('db file doesn\'t exist')
@@ -484,9 +484,11 @@ if __name__ in ["__main__", "__mp_main__"]:
     if args.verbose:
         log.remove(); log.add(sys.stderr, level="TRACE")
 
+    log.add('yk.txt')
+
     if args.db:
-        app.on_startup(db.init_db(args.db))
-        app.on_shutdown(db.close_db)
+        app.on_startup(db.init(args.db))
+        app.on_shutdown(db.close)
 
     ui.run(
         port=1337, 

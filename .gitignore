@@ -17,3 +17,6 @@ wheels/
 
 # test dbs
 *.db
+
+# logs
+*.txt
