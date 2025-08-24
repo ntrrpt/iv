@@ -364,12 +364,13 @@ async def db_search():
 
             sw.stop()
             search.props(remove='loading')
-
             app.storage.client['posts'] = posts.copy()
             app.storage.client['posts_by_id'] = util.posts_by_id(app.storage.client['posts'])
         except Exception as ex:
+            search.props(remove='loading')
             ui.notify(f"query err: {str(ex)}", type='negative', position='top')
             return
+        
 
         ui.page_title(q)
 
