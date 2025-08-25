@@ -176,8 +176,8 @@ async def find_posts_by_text(
         TEXT: str, 
         LIMIT: int = 50, 
         OFFSET: int = 0,
-        BM25: bool = True,
-        FTS: bool = False,
+        RANK: bool = True,
+        BYWORDS: bool = False,
         BOARDS: list[int] = []
     ):
     total_count = 0
@@ -186,8 +186,10 @@ async def find_posts_by_text(
     sw = Stopwatch(2)
     sw.restart()
 
-    if dial() != 'sqlite' or not FTS:
-        # === LIKE-search via ORM ===
+    d = dial()
+
+    if not BYWORDS:
+        # === LIKE-search via ORM (sq3) ===
         total_count = await Post.filter(
             Q(text__icontains=TEXT) & Q(thread__board_id__in=BOARDS)
         ).count()
@@ -221,6 +223,8 @@ async def find_posts_by_text(
             })
 
     else:
+        if d == 'postgres':
+            raise Exception('no')
         # === FTS5 via raw SQL ===
         placeholders = ",".join(["?"] * len(BOARDS))
         async with in_transaction() as conn:
@@ -260,7 +264,7 @@ async def find_posts_by_text(
                 JOIN boards b ON t.board_id = b.seq
                 WHERE posts_fts MATCH ?
                 AND b.seq IN ({placeholders})
-                ORDER BY {'rank' if BM25 else 'p.seq'} ASC
+                ORDER BY {'rank' if RANK else 'p.seq'} ASC
                 LIMIT ? OFFSET ?;
             """
             params = [TEXT] + BOARDS + [LIMIT, OFFSET]
@@ -352,6 +356,11 @@ async def add_posts(board_id: int, thread_id: int, posts: list = [], path: str =
 
 async def create():
     postgres_schema = """
+        -- Включаем расширения (повторно безопасно)
+        CREATE EXTENSION IF NOT EXISTS pg_trgm;
+        CREATE EXTENSION IF NOT EXISTS unaccent;
+
+        -- Таблицы
         CREATE TABLE IF NOT EXISTS boards (
             seq SERIAL PRIMARY KEY,
             name TEXT NOT NULL UNIQUE,
@@ -385,7 +394,45 @@ async def create():
             file_url TEXT,
             thumb_url TEXT,
             file_data BYTEA
-    );
+        );
+
+        -- Добавляем tsvector, если не существует
+        ALTER TABLE posts ADD COLUMN IF NOT EXISTS text_tsv tsvector;
+        ALTER TABLE threads ADD COLUMN IF NOT EXISTS title_tsv tsvector;
+
+        -- Обновляем tsvector для старых данных
+        UPDATE posts SET text_tsv = to_tsvector('russian', coalesce(text, ''));
+        UPDATE threads SET title_tsv = to_tsvector('russian', coalesce(title, ''));
+
+        -- Индексы (безопасно, повторно)
+        CREATE INDEX IF NOT EXISTS idx_posts_tsv ON posts USING gin(text_tsv);
+        CREATE INDEX IF NOT EXISTS idx_threads_title_tsv ON threads USING gin(title_tsv);
+        CREATE INDEX IF NOT EXISTS idx_posts_text_trgm ON posts USING gin(text gin_trgm_ops);
+        CREATE INDEX IF NOT EXISTS idx_threads_title_trgm ON threads USING gin(title gin_trgm_ops);
+
+        -- Функции (пересоздаём, чтобы не было конфликтов)
+        CREATE OR REPLACE FUNCTION posts_tsv_trigger() RETURNS trigger AS $$
+        BEGIN
+        NEW.text_tsv := to_tsvector('russian', coalesce(NEW.text, ''));
+        RETURN NEW;
+        END
+        $$ LANGUAGE plpgsql;
+
+        CREATE OR REPLACE FUNCTION threads_tsv_trigger() RETURNS trigger AS $$
+        BEGIN
+        NEW.title_tsv := to_tsvector('russian', coalesce(NEW.title, ''));
+        RETURN NEW;
+        END
+        $$ LANGUAGE plpgsql;
+
+        -- Триггеры (сначала удаляем, потом создаём заново)
+        DROP TRIGGER IF EXISTS tsvectorupdate_posts ON posts;
+        CREATE TRIGGER tsvectorupdate_posts BEFORE INSERT OR UPDATE
+        ON posts FOR EACH ROW EXECUTE FUNCTION posts_tsv_trigger();
+
+        DROP TRIGGER IF EXISTS tsvectorupdate_threads ON threads;
+        CREATE TRIGGER tsvectorupdate_threads BEFORE INSERT OR UPDATE
+        ON threads FOR EACH ROW EXECUTE FUNCTION threads_tsv_trigger();
     """
 
     sq3_schema = """

@@ -361,8 +361,8 @@ async def db_search():
 
             count, posts = await db.find_posts_by_text(
                 q,
-                FTS=fts_checkbox.value,
-                BM25=fts_checkbox.value and bm25_checkbox.value,
+                BYWORDS=fts_checkbox.value,
+                RANK=fts_checkbox.value and bm25_checkbox.value,
                 LIMIT=limit, 
                 OFFSET=offset,
                 BOARDS=board_filter._props['ticked'] # lol
@@ -447,9 +447,9 @@ async def db_search():
             
         posts_on_page.on('keydown.enter', lambda e: (draw()))
 
-        fts_checkbox = ui.checkbox('fts5', value=True)
+        fts_checkbox = ui.checkbox('words', value=True)
 
-        bm25_checkbox = ui.checkbox('bm25', value=False).bind_visibility_from(fts_checkbox, 'value')
+        bm25_checkbox = ui.checkbox('rank', value=False).bind_visibility_from(fts_checkbox, 'value')
 
         ui.space()
 
