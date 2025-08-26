@@ -20,7 +20,7 @@ boards = [
     ['b',     'Бред'], # ok
     ['bro',   'My Little Pony'], # ok
     ['fr' ,   'Фурри'], # ok
-    ['gf',    'GIF- и FLASH-анимация'], # ok
+    ['gf',    'GIF и FLASH-анимация'], # ok
     ['hr',    'Высокое разрешение'], # ok
     ['l',     'Литература'], # ok
     ['m',     'Картинки-макросы и копипаста'], # ok
@@ -41,7 +41,11 @@ boards = [
     ['w',     'Обои'], # ok
     ['x',     'Паранормальные явления'], # ok
 
-    ['bg',    'IIchan Archives — Настольные игры'], # ok
+    ['au',    'Автомобили'], # ok
+    ['mo',    'Мотоциклы'], # ok
+    ['tr',    'Транспорт'], # ok
+
+    ['bg',    'Настольные игры'], # ok
     ['vg',    'Видеоигры'], # ok
 
     ['a',     'Аниме и манга'], # ok
@@ -321,6 +325,7 @@ async def html2db(dump_path='b', db_url='ii.db'):
     await db.init(db_url)
 
     if not await db.create():
+        log.error('create fail')
         await db.close()
         return
 
@@ -383,12 +388,13 @@ async def html2db(dump_path='b', db_url='ii.db'):
     await db.close()
 
 if __name__ == "__main__":
+    # for async event loops
     warnings.filterwarnings("ignore", category=DeprecationWarning) 
 
     ap = argparse.ArgumentParser(description='ii.yakuji.moe tools')
+    ap.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose output (traces)')
 
     g = ap.add_argument_group("html2db options")
-    
     g.add_argument('-p', '--path', nargs='+', type=str, help='''
         [toggle] input dirs with thread folders 
         (<board_prefix>/<thread_id>/<thread_id>.html, 
@@ -399,24 +405,20 @@ if __name__ == "__main__":
     g.add_argument('--files', action="store_true", default=False, help='add file blobs to db')
 
     g = ap.add_argument_group("dumper options")
-
     g.add_argument('--url', type=str, nargs='+', help='''
-        [toggle] urls to dump 
-        (http://ii.yakuji.moe/azu http://ii.yakuji.moe/c)
+        [toggle] urls to dump (http://ii.yakuji.moe/azu http://ii.yakuji.moe/c)
         '''
     )
     g.add_argument('--range', type=str, default='0-9999', help='''
-        pages to dump, default 0-9999
-        (from-to, 0-5, 20-30)
+        pages to dump, default 0-9999 (from-to, 0-5, 20-30)
         '''
     )
-
-    ap.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose output (traces)')
 
     args = ap.parse_args()
 
     if args.verbose:
-        log.remove(); log.add(sys.stderr, level="TRACE")
+        log.remove()
+        log.add(sys.stderr, level="TRACE")
 
     log.add('yk.txt')
 

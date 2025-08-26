@@ -1,18 +1,18 @@
+import os, requests, filetype
 import util, yk
+
 from loguru import logger as log
 from stopwatch import Stopwatch
-import sqlite3, os, requests, filetype
-from pprint import pprint as pp, pformat as pf
 from pathlib import Path
 
-from tortoise import Tortoise
-from tortoise import fields, connections
+from tortoise import Tortoise, fields, connections
 from tortoise.transactions import in_transaction
 from tortoise.expressions import Q, Case, When, Value
 from tortoise.functions import Count
 from tortoise.models import Model
 
 def dial():
+    # returns db backend (postgres, sqlite)
     conn = Tortoise.get_connection("default")
     return conn.capabilities.dialect
 
@@ -189,7 +189,7 @@ async def find_posts_by_text(
     d = dial()
 
     if not BYWORDS:
-        # === LIKE-search via ORM (sq3) ===
+        # === LIKE-search via ORM (sq3, postgres) ===
         total_count = await Post.filter(
             Q(text__icontains=TEXT) & Q(thread__board_id__in=BOARDS)
         ).count()
@@ -224,11 +224,12 @@ async def find_posts_by_text(
 
     else:
         if d == 'postgres':
-            raise Exception('no')
+            raise Exception('postgres comming soon')
+
         # === FTS5 via raw SQL ===
         placeholders = ",".join(["?"] * len(BOARDS))
         async with in_transaction() as conn:
-            count_sql = f"""
+            q = f"""
                 SELECT COUNT(*) AS total_count
                 FROM posts_fts
                 JOIN posts p ON posts_fts.rowid = p.seq
@@ -238,11 +239,10 @@ async def find_posts_by_text(
                 AND b.seq IN ({placeholders})
             """
             count_params = [TEXT] + BOARDS
-            rows = await conn.execute_query(count_sql, count_params)
+            rows = await conn.execute_query(q, count_params)
             total_count = rows[1][0]["total_count"]
 
-            # Основной запрос
-            query_sql = f"""
+            q = f"""
                 SELECT
                     p.seq,
                     p.post_id,
@@ -268,7 +268,7 @@ async def find_posts_by_text(
                 LIMIT ? OFFSET ?;
             """
             params = [TEXT] + BOARDS + [LIMIT, OFFSET]
-            result = await conn.execute_query(query_sql, params)
+            result = await conn.execute_query(q, params)
 
             posts_dict = {}
             for row in result[1]:
@@ -307,7 +307,7 @@ async def add_board(name: str, description: str = '') -> int:
 async def add_thread(board_id: int, first_id: int, title: str) -> int:
     existing = await Thread.filter(board_id=board_id, first_id=first_id).first()
     if existing:
-        log.warning(f'found dub: fid:{first_id} on bid:{board_id}')
+        log.trace(f'found dub: fid:{first_id} on bid:{board_id}')
         return existing.seq
 
     thread = await Thread.create(board_id=board_id, first_id=first_id, title=title)
@@ -317,7 +317,7 @@ async def add_posts(board_id: int, thread_id: int, posts: list = [], path: str =
     for post in posts or []:
         existing = await Post.filter(post_id=post['id'], board_id=board_id).first()
         if existing:
-            log.warning(f'found dub: tid:{thread_id} on bid:{board_id}')
+            log.trace(f'found dub: tid:{thread_id} on bid:{board_id}')
             continue
 
         new_post = await Post.create(
@@ -355,12 +355,7 @@ async def add_posts(board_id: int, thread_id: int, posts: list = [], path: str =
             )
 
 async def create():
-    postgres_schema = """
-        -- Включаем расширения (повторно безопасно)
-        CREATE EXTENSION IF NOT EXISTS pg_trgm;
-        CREATE EXTENSION IF NOT EXISTS unaccent;
-
-        -- Таблицы
+    pg_sch = """
         CREATE TABLE IF NOT EXISTS boards (
             seq SERIAL PRIMARY KEY,
             name TEXT NOT NULL UNIQUE,
@@ -396,46 +391,58 @@ async def create():
             file_data BYTEA
         );
 
-        -- Добавляем tsvector, если не существует
+        CREATE EXTENSION IF NOT EXISTS pg_trgm;
+        CREATE EXTENSION IF NOT EXISTS unaccent;
+
         ALTER TABLE posts ADD COLUMN IF NOT EXISTS text_tsv tsvector;
         ALTER TABLE threads ADD COLUMN IF NOT EXISTS title_tsv tsvector;
 
-        -- Обновляем tsvector для старых данных
-        UPDATE posts SET text_tsv = to_tsvector('russian', coalesce(text, ''));
-        UPDATE threads SET title_tsv = to_tsvector('russian', coalesce(title, ''));
+        -- update indexes (sq3 to pg via pgloader maybe)
+        -- UPDATE posts SET text_tsv = to_tsvector('russian', coalesce(text, ''));
+        -- UPDATE threads SET title_tsv = to_tsvector('russian', coalesce(title, ''));
 
-        -- Индексы (безопасно, повторно)
         CREATE INDEX IF NOT EXISTS idx_posts_tsv ON posts USING gin(text_tsv);
         CREATE INDEX IF NOT EXISTS idx_threads_title_tsv ON threads USING gin(title_tsv);
         CREATE INDEX IF NOT EXISTS idx_posts_text_trgm ON posts USING gin(text gin_trgm_ops);
         CREATE INDEX IF NOT EXISTS idx_threads_title_trgm ON threads USING gin(title gin_trgm_ops);
 
-        -- Функции (пересоздаём, чтобы не было конфликтов)
-        CREATE OR REPLACE FUNCTION posts_tsv_trigger() RETURNS trigger AS $$
+        CREATE OR REPLACE FUNCTION tsvector_update_posts() RETURNS trigger AS $$
         BEGIN
         NEW.text_tsv := to_tsvector('russian', coalesce(NEW.text, ''));
         RETURN NEW;
         END
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION threads_tsv_trigger() RETURNS trigger AS $$
+        CREATE OR REPLACE FUNCTION tsvector_update_threads() RETURNS trigger AS $$
         BEGIN
         NEW.title_tsv := to_tsvector('russian', coalesce(NEW.title, ''));
         RETURN NEW;
         END
         $$ LANGUAGE plpgsql;
 
-        -- Триггеры (сначала удаляем, потом создаём заново)
-        DROP TRIGGER IF EXISTS tsvectorupdate_posts ON posts;
-        CREATE TRIGGER tsvectorupdate_posts BEFORE INSERT OR UPDATE
-        ON posts FOR EACH ROW EXECUTE FUNCTION posts_tsv_trigger();
+        DO $$
+        BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_trigger WHERE tgname = 'tsvectorupdate_posts'
+        ) THEN
+            CREATE TRIGGER tsvectorupdate_posts
+            BEFORE INSERT OR UPDATE ON posts
+            FOR EACH ROW
+            EXECUTE FUNCTION tsvector_update_posts();
+        END IF;
 
-        DROP TRIGGER IF EXISTS tsvectorupdate_threads ON threads;
-        CREATE TRIGGER tsvectorupdate_threads BEFORE INSERT OR UPDATE
-        ON threads FOR EACH ROW EXECUTE FUNCTION threads_tsv_trigger();
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_trigger WHERE tgname = 'tsvectorupdate_threads'
+        ) THEN
+            CREATE TRIGGER tsvectorupdate_threads
+            BEFORE INSERT OR UPDATE ON threads
+            FOR EACH ROW
+            EXECUTE FUNCTION tsvector_update_threads();
+        END IF;
+        END$$;
     """
 
-    sq3_schema = """
+    sq3_sch = """
         CREATE TABLE IF NOT EXISTS boards (
             seq INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
@@ -492,15 +499,16 @@ async def create():
         END;
     """
 
-    conn = connections.get("default")
+    c = connections.get("default")
+    d = dial()
 
-    match dial():
+    match d:
         case 'sqlite':
-            await conn.execute_script(sq3_schema)
+            await c.execute_script(sq3_sch)
             return 'sqlite'
         case 'postgres':
-            await conn.execute_script(postgres_schema)
+            await c.execute_script(pg_sch)
             return 'postgres'
-        case _ as dialect:
-            log.error(f'tf is {d}')
+        case _:
+            log.error(f'{d} not supported')
             return False

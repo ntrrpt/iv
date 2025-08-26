@@ -500,9 +500,10 @@ if __name__ in ["__main__", "__mp_main__"]:
     args = ap.parse_args()
 
     if args.verbose:
-        log.remove(); log.add(sys.stderr, level="TRACE")
+        log.remove()
+        log.add(sys.stderr, level="TRACE")
 
-    log.add('yk.txt')
+    log.add('iv.txt')
 
     if args.db:            
         app.on_startup(db.init(args.db))

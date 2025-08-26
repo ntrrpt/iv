@@ -1,5 +1,39 @@
 '''
 
+async def _table_exists(table_name: str) -> bool:
+    conn = connections.get("default")
+    dialect = conn.capabilities.dialect
+
+    match dialect:
+        case "postgres":
+            query = """
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.tables 
+                    WHERE table_schema = 'public' AND table_name = $1
+                ) AS exists
+            """
+            _, rows = await conn.execute_query(query, [table_name])
+            return rows[0]["exists"]
+
+        case "mysql":
+            query = """
+                SELECT COUNT(*) AS cnt FROM information_schema.tables 
+                WHERE table_schema = DATABASE() AND table_name = %s
+            """
+            _, rows = await conn.execute_query(query, [table_name])
+            return rows[0]["cnt"] > 0
+
+        case "sqlite":
+            query = """
+                SELECT name FROM sqlite_master WHERE type='table' AND name=?
+            """
+            _, rows = await conn.execute_query(query, [table_name])
+            return len(rows) > 0
+
+        case _:
+            raise NotImplementedError(f"{dialect} not supported")
+
+
 def _find_file_by_seq(db, post_seq): # sync
     with sqlite3.connect(db) as conn:
         cur = conn.cursor()
