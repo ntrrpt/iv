@@ -53,7 +53,7 @@ main_boards = [
 
     ['a',     'Аниме и манга'],
     ['aa',    'Аниме-арт'],
-    ['abe',   'Old Home'], # FAIL ########################
+    ['abe',   'Old Home'],
     ['azu',   'Azumanga Daioh'],
     ['c',     'Косплей'],
     ['dn',    'Death Note'],
