@@ -11,18 +11,6 @@ from tortoise.expressions import Q, Case, When, Value
 from tortoise.functions import Count
 from tortoise.models import Model
 
-def dial():
-    # returns db backend (postgres, sqlite)
-    conn = Tortoise.get_connection("default")
-    return conn.capabilities.dialect
-
-async def init(url: str) -> None:
-    await Tortoise.init(db_url=url, modules={'models': ['db']})
-    await Tortoise.generate_schemas()
-
-async def close() -> None:
-    await Tortoise.close_connections()
-
 class Board(Model):
     seq = fields.IntField(pk=True)
     name = fields.CharField(max_length=255, unique=True)
@@ -65,7 +53,19 @@ class Attachment(Model):
 
     class Meta:
         table = "attachments"
-    
+
+def dial():
+    # returns db backend (postgres, sqlite)
+    conn = Tortoise.get_connection("default")
+    return conn.capabilities.dialect
+
+async def init(url: str) -> None:
+    await Tortoise.init(db_url=url, modules={'models': ['db']})
+    await Tortoise.generate_schemas()
+
+async def close() -> None:
+    await Tortoise.close_connections()
+
 async def stats():
     q = """
         SELECT 
@@ -482,6 +482,24 @@ async def create():
             FOREIGN KEY(post_seq) REFERENCES posts(seq)
         );
 
+        -- fts5 for threads
+        CREATE VIRTUAL TABLE IF NOT EXISTS threads_fts USING fts5 (
+            title, content='threads', content_rowid='seq'
+        );
+
+        CREATE TRIGGER IF NOT EXISTS threads_ai AFTER INSERT ON threads BEGIN
+            INSERT INTO threads_fts(rowid, title) VALUES (new.seq, new.title);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS threads_au AFTER UPDATE ON threads BEGIN
+            UPDATE threads_fts SET title = new.title WHERE rowid = new.seq;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS threads_ad AFTER DELETE ON threads BEGIN
+            DELETE FROM threads_fts WHERE rowid = old.seq;
+        END;
+
+        -- fts5 for posts
         CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5 (
             text, content='posts', content_rowid='seq'
         );
@@ -497,6 +515,7 @@ async def create():
         CREATE TRIGGER IF NOT EXISTS posts_ad AFTER DELETE ON posts BEGIN
             DELETE FROM posts_fts WHERE rowid = old.seq;
         END;
+
     """
 
     c = connections.get("default")
