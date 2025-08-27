@@ -5,6 +5,7 @@ todo:
     - classes ToT
     - green mystery lines (o)_(o)
     - fix html in posts
+    - disable displaying pics ???????
 '''
 from tortoise import Tortoise
 from nicegui import app, ui

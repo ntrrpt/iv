@@ -13,82 +13,125 @@ from loguru import logger as log
 from pathlib import Path
 from bs4 import BeautifulSoup
 
-boards = [
-    ['d',     'Работа сайта'], # ok
+SITE = 'http://ii.yakuji.moe'
 
-    ['an',    'Живопись'], # ok
-    ['b',     'Бред'], # ok
-    ['bro',   'My Little Pony'], # ok
-    ['fr' ,   'Фурри'], # ok
-    ['gf',    'GIF и FLASH-анимация'], # ok
-    ['hr',    'Высокое разрешение'], # ok
-    ['l',     'Литература'], # ok
-    ['m',     'Картинки-макросы и копипаста'], # ok
-    ['maid',  'Служанки'], # ok
-    ['med',   'Медицина'], # ok
-    ['mi',    'Оружие'], # ok
-    ['mu',    'Музыка'], # ok
-    ['ne',    'Животные'], # ok
-    ['o',     'Оэкаки'], # ok
-    ['ph',    'Фото'], # ok
-    ['r',     'Просьбы'], # ok
-    ['s',     'Электроника и ПО'], # ok
-    ['sci',   'Наука'], # ok
-    ['sp',    'Спорт'], # ok
-    ['t',     'Торренты'], # ok
-    ['tran',  'Иностранные языки'], # ok
-    ['tv',    'Кино и ТВ'], # ok
-    ['w',     'Обои'], # ok
-    ['x',     'Паранормальные явления'], # ok
+main_boards = [
+    ['d',     'Работа сайта'],
 
-    ['au',    'Автомобили'], # ok
-    ['mo',    'Мотоциклы'], # ok
-    ['tr',    'Транспорт'], # ok
+    ['an',    'Живопись'],
+    ['b',     'Бред'],
+    ['bro',   'My Little Pony'],
+    ['fr' ,   'Фурри'],
+    ['gf',    'GIF и FLASH-анимация'],
+    ['hr',    'Высокое разрешение'],
+    ['l',     'Литература'],
+    ['m',     'Картинки-макросы и копипаста'],
+    ['maid',  'Служанки'],
+    ['med',   'Медицина'],
+    ['mi',    'Оружие'],
+    ['mu',    'Музыка'],
+    ['ne',    'Животные'],
+    ['o',     'Оэкаки'],
+    ['old_o', 'Архив оэкаки'],
+    ['ph',    'Фото'],
+    ['r',     'Просьбы'],
+    ['s',     'Электроника и ПО'],
+    ['sci',   'Наука'],
+    ['sp',    'Спорт'],
+    ['t',     'Торренты'],
+    ['tran',  'Иностранные языки'],
+    ['tv',    'Кино и ТВ'],
+    ['w',     'Обои'],
+    ['x',     'Паранормальные явления'],
 
-    ['bg',    'Настольные игры'], # ok
-    ['vg',    'Видеоигры'], # ok
+    ['au',    'Автомобили'],
+    ['mo',    'Мотоциклы'],
+    ['tr',    'Транспорт'],
 
-    ['a',     'Аниме и манга'], # ok
-    ['aa',    'Аниме-арт'], # ok
+    ['bg',    'Настольные игры'],
+    ['vg',    'Видеоигры'],
+
+    ['a',     'Аниме и манга'],
+    ['aa',    'Аниме-арт'],
     ['abe',   'Old Home'], # FAIL ########################
-    ['azu',   'Azumanga Daioh'], # ok
-    ['c',     'Косплей'], # ok
-    ['dn',    'Death Note'], # ok
-    ['fi',    'Фигурки'], # ok
-    ['hau',   'Higurashi no Naku Koro ni'], # ok
-    ['jp',    'Япония'], # ok
-    ['ls',    'Lucky☆Star'], # ok
-    ['ma',    'Манга'], # ok
-    ['me',    'Меха'], # ok
-    ['rm',    'Rozen Maiden'], # ok
-    ['sos',   'Suzumiya Haruhi no Yūutsu'], # ok
-    ['tan',   'Сетевые персонажи'], # ok
-    ['to',    'Touhou'], # ok
-    ['vn',    'Визуальные новеллы'], # ok
+    ['azu',   'Azumanga Daioh'],
+    ['c',     'Косплей'],
+    ['dn',    'Death Note'],
+    ['fi',    'Фигурки'],
+    ['hau',   'Higurashi no Naku Koro ni'],
+    ['jp',    'Япония'],
+    ['ls',    'Lucky☆Star'],
+    ['ma',    'Манга'],
+    ['me',    'Меха'],
+    ['rm',    'Rozen Maiden'],
+    ['sos',   'Suzumiya Haruhi no Yūutsu'],
+    ['tan',   'Сетевые персонажи'],
+    ['to',    'Touhou'],
+    ['vn',    'Визуальные новеллы'],
 
-    ['misc',  'Баннеры'], # ok
-    ['tenma', 'Юбилейные Баннеры'], # ok
-    ['vndev', 'Разработка визуальных новелл'], # ok
+    ['misc',  'Баннеры'],
+    ['tenma', 'Юбилейные Баннеры'],
+    ['vndev', 'Разработка визуальных новелл'],
 
     ['dev',   'Работа архива'] # FAIL ########################
 ]
 
-sfxs = [x[0] for x in boards]
+arch_boards = [
+    ['azu/arch',   'Azumanga Daioh (архивы)'],
+    ['d/arch',     'Работа сайта (архивы)'],
+    ['an/arch',    'Живопись (архивы)'],
+    ['b/arch',     'Бред (архивы)'],
+    ['bro/arch',   'My Little Pony (архивы)'],
+    ['fr/arch',    'Фурри (архивы)'],
+    ['gf/arch',    'GIF и FLASH-анимация (архивы)'],
+    ['hr/arch',    'Высокое разрешение (архивы)'],
+    ['m/arch',     'Картинки-макросы и копипаста (архивы)'],
+    ['maid/arch',  'Служанки (архивы)'],
+    ['med/arch',   'Медицина (архивы)'],
+    ['mi/arch',    'Оружие (архивы)'],
+    ['mu/arch',    'Музыка (архивы)'],
+    ['sci/arch',   'Наука (архивы)'],
+    ['sp/arch',    'Спорт (архивы)'],
+    ['tran/arch',  'Иностранные языки (архивы)'],
+    ['w/arch',     'Обои (архивы)'],
+    ['x/arch',     'Паранормальные явления (архивы)'],
+    ['bg/arch',    'Настольные игры (архивы)'],
+    ['vg/arch',    'Видеоигры (архивы)'],
+    ['au/arch',    'Автомобили (архивы)'],
+    ['mo/arch',    'Мотоциклы (архивы)'],
+    ['tr/arch',    'Транспорт (архивы)'],
+    ['a/arch',     'Аниме и манга (архивы)'],
+    ['aa/arch',    'Аниме-арт (архивы)'],
+    ['c/arch',     'Косплей (архивы)'],
+    ['fi/arch',    'Фигурки (архивы)'],
+    ['hau/arch',   'Higurashi no Naku Koro ni (архивы)'],
+    ['jp/arch',    'Япония (архивы)'],
+    ['ls/arch',    'Lucky☆Star (архивы)'],
+    ['ma/arch',    'Манга (архивы)'],
+    ['rm/arch',    'Rozen Maiden (архивы)'],
+    ['sos/arch',   'Suzumiya Haruhi no Yūutsu (архивы)'],
+    ['tan/arch',   'Сетевые персонажи (архивы)'],
+    ['to/arch',    'Touhou (архивы)'],
+    ['vn/arch',    'Визуальные новеллы (архивы)'],
+    ['ne/arch',    'Животные (архивы)'],
+    ['ph/arch',    'Фото (архивы)'],
+    ['r/arch',     'Просьбы (архивы)']
+]
 
-SITE = 'http://ii.yakuji.moe'
+all_boards = main_boards + arch_boards
 
+main_sfxs = [x[0] for x in main_boards]
+arch_sfxs = [x[0] for x in arch_boards]
+all_sfxs = main_sfxs + arch_sfxs
 
-def dump(board_url, from_to):
-    if not util.is_aria2c_available():
-        log.error('no aria2c detected ;C')
-        sys.exit()
-
-    def dump_thread(thread_url, board_sfx):
+def dump(sfx, from_to):
+    def dump_thread(t_url, board_sfx):
+        #######################################
         img_urls = []
 
         while True:
             try:
-                r = requests.get(thread_url)
+                r = requests.get(t_url)
                 break
             except Exception as e:
                 log.error(str(e))
@@ -97,58 +140,83 @@ def dump(board_url, from_to):
         htm_urls = [x.get('href') for x in soup.find_all("a") if x.get('href') is not None]
         
         for htm in htm_urls:
-            if not htm.startswith(f'/{board_sfx}/src/'):
-                continue
+            g = [ # must be all true
+                htm.startswith(f'/{board_sfx}/src/'),
+                htm.endswith(tuple(util.exts)),
+                'iichan' not in htm,
+                'desuchan' not in htm
+            ]
 
-            if not htm.endswith(tuple(util.exts)):
-                continue
-
-            img_urls.append('http://ii.yakuji.moe' + htm)
+            if all(g):
+                img_urls.append('http://ii.yakuji.moe' + htm)
     
         img_urls = list(set(img_urls))
-        img_urls.append(thread_url)
-
+        img_urls.append(t_url)
         subprocess.run(util.aria2c_args + img_urls)
+        #####################################
 
-    if 'html' in board_url:
-        board_url = os.path.dirname(board_url)
+    if sfx not in all_sfxs:
+        log.error('invalid board')
+        return
 
-    board_sfx = board_url[board_url.rfind("/")+1:] # a
+    if not util.is_aria2c_available():
+        log.error('no aria2c detected ;C')
+        sys.exit()
+
+    url = '/'.join([SITE, sfx])
 
     fr, to = from_to.split('-')
-    gate = [x for x in range(int(fr), int(to))]
+    fr_to = [x for x in range(int(fr), int(to))]
 
-    soup = BeautifulSoup(requests.get(board_url).text, "html.parser")
+    soup = BeautifulSoup(requests.get(url).text, "html.parser")
     
-    page_sfx = ['index.html'] # num of pages
+    pages = ['wakaba.html' if 'arch' in sfx else 'index.html'] # num of pages
+    _0_9999 = tuple([str(x) for x in range(9999)])
+
     for sp in soup.find_all("a"):
-        if '.html' in str(sp) and len(sp.get('href')) < 10: # 9999:
-            page_sfx.append(sp.get('href'))
+        href = sp.get('href')
+        if not href:
+            continue
+
+        href = href.removeprefix('/%s/' % sfx)
+        if href.startswith(_0_9999) and href.endswith('.html'):
+            pages.append(href)
 
     threads = []
     
-    for i, sfx in enumerate(page_sfx):
-        if i not in gate:
+    for i, page in enumerate(pages):
+        if i not in fr_to:
             continue
         
         while True:
             try:
-                r = requests.get(f'{board_url}/{sfx}')
+                u = '/'.join([url, page])
+                r = requests.get(u)
                 break
             except Exception as e:
                 log.error(str(e))
 
         soup = BeautifulSoup(r.text, "html.parser")
-        htm_links = [x.get('href') for x in soup.find_all("a") if x.get('href') is not None] 
+        htm_urls = [x.get('href') for x in soup.find_all("a") if x.get('href') is not None] 
 
-        for htm in htm_links:
-            if htm.startswith('./res/') and htm.endswith('.html'):
-                threads.append(board_url + htm[1:])
+        for htm in htm_urls:
+            htm = htm.replace('/%s' % sfx, '.') # /ph/arch/res/10852.html => ./res/10852.html (for arch)
 
-        log.info(f'{i + 1} / {len(page_sfx)}, {len(threads)} found', end = '\r')
+            g = [ # must be all true
+                htm.endswith('.html'), 
+                htm.startswith('./res/'),
+                'iichan' not in htm,
+                'desuchan' not in htm
+            ]
+            
+            if all(g):
+                threads.append(url + htm[1:])
 
-    os.makedirs(board_sfx, exist_ok=True)
-    os.chdir(board_sfx)
+        log.info(f'{i + 1} / {len(pages)}, {len(threads)} found', end = '\r')
+
+    d = sfx.replace('/', '-')
+    os.makedirs(d, exist_ok=True)
+    os.chdir(d)
 
     for ii, thread in enumerate(threads):
         log.info(f'{ii + 1} / {len(threads) }, {thread}', end = '      \n')
@@ -157,7 +225,7 @@ def dump(board_url, from_to):
         os.makedirs(num, exist_ok=True)
 
         os.chdir(num)
-        dump_thread(thread, board_sfx)
+        dump_thread(thread, sfx)
         os.chdir('..')
 
     os.chdir('..')
@@ -282,6 +350,10 @@ def parse_thread(html: str) -> dict:
     for reply in replies:
         files = []
         post = reply.find("td", class_="reply")
+                
+        if not post: # arch fix
+            continue
+
         post_id = post.get("id").replace("reply", "")
         poster_name = post.find("span", class_="commentpostername").get_text(strip=True)
         label_text = post.find("label").get_text(" ", strip=True)
@@ -329,7 +401,7 @@ async def html2db(dump_path='b', db_url='ii.db'):
         await db.close()
         return
 
-    for board in boards:
+    for board in all_boards:
         if await db.find_board_by_name(board[0]):
             continue
 
@@ -405,8 +477,8 @@ if __name__ == "__main__":
     g.add_argument('--files', action="store_true", default=False, help='add file blobs to db')
 
     g = ap.add_argument_group("dumper options")
-    g.add_argument('--url', type=str, nargs='+', help='''
-        [toggle] urls to dump (http://ii.yakuji.moe/azu http://ii.yakuji.moe/c)
+    g.add_argument('-s', '--sfx', type=str, nargs='+', help='''
+        [toggle] boards to dump (azu, arch/ls)
         '''
     )
     g.add_argument('--range', type=str, default='0-9999', help='''
@@ -422,8 +494,20 @@ if __name__ == "__main__":
 
     log.add('yk.txt')
 
-    for url in args.url or []:
-        dump(board_url=url, from_to=args.range)
+    if args.sfx:
+        match args.sfx[0]:
+            case 'main':
+                log.info('main boards set: %s' % main_sfxs)
+                args.sfx = main_sfxs
+            case 'arch':
+                log.info('arch boards set: %s' % arch_sfxs)
+                args.sfx = arch_sfxs
+            case 'all':
+                log.info('all boards set: %s' % all_sfxs)
+                args.sfx = all_sfxs
+
+        for s in args.sfx:
+            dump(sfx=s, from_to=args.range)
 
     for path in args.path or []:
         if not args.db:

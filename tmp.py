@@ -33,6 +33,58 @@ async def _table_exists(table_name: str) -> bool:
         case _:
             raise NotImplementedError(f"{dialect} not supported")
 
+    1.html  
+    2.html  
+    3.html  
+    4.html  
+    5.html  
+    6.html  
+    7.html  
+    8.html  
+    9.html  
+    10.html 
+    11.html 
+    12.html 
+    13.html 
+    14.html 
+    15.html 
+    16.html 
+    17.html 
+    18.html 
+    19.html 
+    20.html 
+    21.html 
+    22.html 
+    23.html 
+    24.html 
+    25.html 
+    26.html 
+    27.html 
+
+
+
+
+    /ph/arch/1.html
+    /ph/arch/2.html
+    
+    /ph/arch/res/10852.html#i14836
+/ph/arch/res/10852.html#i14837
+/ph/arch/res/10852.html#i14838
+/ph/arch/res/10852.html#i14840
+/ph/arch/res/10852.html#i14853
+/ph/arch/res/10852.html#i14860
+/ph/arch/res/10852.html#i14861
+/ph/arch/res/10852.html#i14862
+    
+    ./res/10783.html http://ii.yakuji.moe/azu/res/10783.html
+./res/57.html http://ii.yakuji.moe/azu/res/57.html
+./res/3971.html http://ii.yakuji.moe/azu/res/3971.html
+./res/3073.html http://ii.yakuji.moe/azu/res/3073.html
+./res/7850.html http://ii.yakuji.moe/azu/res/7850.html
+./res/10800.html http://ii.yakuji.moe/azu/res/10800.html
+./res/10993.html http://ii.yakuji.moe/azu/res/10993.html
+    
+    
 
 def _find_file_by_seq(db, post_seq): # sync
     with sqlite3.connect(db) as conn:
