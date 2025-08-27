@@ -77,45 +77,45 @@ main_boards = [
 ]
 
 arch_boards = [
-    ['azu/arch',   'Azumanga Daioh (архивы)'],
-    ['d/arch',     'Работа сайта (архивы)'],
-    ['an/arch',    'Живопись (архивы)'],
-    ['b/arch',     'Бред (архивы)'],
-    ['bro/arch',   'My Little Pony (архивы)'],
-    ['fr/arch',    'Фурри (архивы)'],
-    ['gf/arch',    'GIF и FLASH-анимация (архивы)'],
-    ['hr/arch',    'Высокое разрешение (архивы)'],
-    ['m/arch',     'Картинки-макросы и копипаста (архивы)'],
-    ['maid/arch',  'Служанки (архивы)'],
-    ['med/arch',   'Медицина (архивы)'],
-    ['mi/arch',    'Оружие (архивы)'],
-    ['mu/arch',    'Музыка (архивы)'],
-    ['sci/arch',   'Наука (архивы)'],
-    ['sp/arch',    'Спорт (архивы)'],
-    ['tran/arch',  'Иностранные языки (архивы)'],
-    ['w/arch',     'Обои (архивы)'],
-    ['x/arch',     'Паранормальные явления (архивы)'],
-    ['bg/arch',    'Настольные игры (архивы)'],
-    ['vg/arch',    'Видеоигры (архивы)'],
-    ['au/arch',    'Автомобили (архивы)'],
-    ['mo/arch',    'Мотоциклы (архивы)'],
-    ['tr/arch',    'Транспорт (архивы)'],
-    ['a/arch',     'Аниме и манга (архивы)'],
-    ['aa/arch',    'Аниме-арт (архивы)'],
-    ['c/arch',     'Косплей (архивы)'],
-    ['fi/arch',    'Фигурки (архивы)'],
-    ['hau/arch',   'Higurashi no Naku Koro ni (архивы)'],
-    ['jp/arch',    'Япония (архивы)'],
-    ['ls/arch',    'Lucky☆Star (архивы)'],
-    ['ma/arch',    'Манга (архивы)'],
-    ['rm/arch',    'Rozen Maiden (архивы)'],
-    ['sos/arch',   'Suzumiya Haruhi no Yūutsu (архивы)'],
-    ['tan/arch',   'Сетевые персонажи (архивы)'],
-    ['to/arch',    'Touhou (архивы)'],
-    ['vn/arch',    'Визуальные новеллы (архивы)'],
-    ['ne/arch',    'Животные (архивы)'],
-    ['ph/arch',    'Фото (архивы)'],
-    ['r/arch',     'Просьбы (архивы)']
+    ['azu_arch',   'Azumanga Daioh (архивы)'],
+    ['d_arch',     'Работа сайта (архивы)'],
+    ['an_arch',    'Живопись (архивы)'],
+    ['b_arch',     'Бред (архивы)'],
+    ['bro_arch',   'My Little Pony (архивы)'],
+    ['fr_arch',    'Фурри (архивы)'],
+    ['gf_arch',    'GIF и FLASH-анимация (архивы)'],
+    ['hr_arch',    'Высокое разрешение (архивы)'],
+    ['m_arch',     'Картинки-макросы и копипаста (архивы)'],
+    ['maid_arch',  'Служанки (архивы)'],
+    ['med_arch',   'Медицина (архивы)'],
+    ['mi_arch',    'Оружие (архивы)'],
+    ['mu_arch',    'Музыка (архивы)'],
+    ['sci_arch',   'Наука (архивы)'],
+    ['sp_arch',    'Спорт (архивы)'],
+    ['tran_arch',  'Иностранные языки (архивы)'],
+    ['w_arch',     'Обои (архивы)'],
+    ['x_arch',     'Паранормальные явления (архивы)'],
+    ['bg_arch',    'Настольные игры (архивы)'],
+    ['vg_arch',    'Видеоигры (архивы)'],
+    ['au_arch',    'Автомобили (архивы)'],
+    ['mo_arch',    'Мотоциклы (архивы)'],
+    ['tr_arch',    'Транспорт (архивы)'],
+    ['a_arch',     'Аниме и манга (архивы)'],
+    ['aa_arch',    'Аниме-арт (архивы)'],
+    ['c_arch',     'Косплей (архивы)'],
+    ['fi_arch',    'Фигурки (архивы)'],
+    ['hau_arch',   'Higurashi no Naku Koro ni (архивы)'],
+    ['jp_arch',    'Япония (архивы)'],
+    ['ls_arch',    'Lucky☆Star (архивы)'],
+    ['ma_arch',    'Манга (архивы)'],
+    ['rm_arch',    'Rozen Maiden (архивы)'],
+    ['sos_arch',   'Suzumiya Haruhi no Yūutsu (архивы)'],
+    ['tan_arch',   'Сетевые персонажи (архивы)'],
+    ['to_arch',    'Touhou (архивы)'],
+    ['vn_arch',    'Визуальные новеллы (архивы)'],
+    ['ne_arch',    'Животные (архивы)'],
+    ['ph_arch',    'Фото (архивы)'],
+    ['r_arch',     'Просьбы (архивы)']
 ]
 
 all_boards = main_boards + arch_boards
@@ -411,7 +411,7 @@ async def html2db(dump_path='b', db_url='ii.db'):
     
     board_name = dump_folder.name
     
-    board_id = await db.find_board_by_name(board_name.replace('_arch', '/arch'))
+    board_id = await db.find_board_by_name(board_name)
 
     if not board_id:
         log.error(f'{board_name}: invalid board name')
