@@ -373,7 +373,13 @@ def parse_thread(html: str) -> dict:
         if t:
             files.append(t)
 
-        text = post.find_all("blockquote")[-1].get_text("\n", strip=True)
+        _ = post.find_all("blockquote")
+        if not _:
+            # a_arch fix
+            log.warning('no text in reply')
+            continue
+
+        text = _[-1].get_text("\n", strip=True)
 
         reply_json = {
             "id": post_id,
