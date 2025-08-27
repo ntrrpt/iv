@@ -214,7 +214,7 @@ def dump(sfx, from_to):
 
         log.info(f'{i + 1} / {len(pages)}, {len(threads)} found', end = '\r')
 
-    d = sfx.replace('/', '-')
+    d = sfx.replace('/', '_')
     os.makedirs(d, exist_ok=True)
     os.chdir(d)
 
