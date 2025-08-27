@@ -455,7 +455,7 @@ async def html2db(dump_path='b', db_url='ii.db'):
             continue
 
         first_post_id = thread['posts'][0]['id']
-        title = thread['title'] or ''
+        title = thread.get('title') or ''
         thread_id = await db.add_thread(board_id, first_post_id, title)
 
         await db.add_posts(board_id, thread_id, thread['posts'], item if args.files else '')
