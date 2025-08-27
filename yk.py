@@ -212,14 +212,14 @@ def dump(sfx, from_to):
             if all(g):
                 threads.append(url + htm[1:])
 
-        log.info(f'{i + 1} / {len(pages)}, {len(threads)} found', end = '\r')
+        log.info(f'{i + 1} / {len(pages)}, {len(threads)} found')
 
     d = sfx.replace('/', '_')
     os.makedirs(d, exist_ok=True)
     os.chdir(d)
 
     for ii, thread in enumerate(threads):
-        log.info(f'{ii + 1} / {len(threads) }, {thread}', end = '      \n')
+        log.info(f'{ii + 1} / {len(threads) }, {thread}')
 
         num = thread[thread.rfind('/')+1:-5]
         os.makedirs(num, exist_ok=True)
@@ -233,6 +233,7 @@ def dump(sfx, from_to):
 def yakuify(url):
     return ''.join([SITE, url])
 
+''' todo: catalog
 def board_menu():
     with ui.button(icon='menu'):
         with ui.menu() as menu:
@@ -242,6 +243,7 @@ def board_menu():
                     ui.menu_item(desc, lambda e, it=item[0]: ui.navigate.to(f'/catalog/{it}'))
                     .props(f'id=post-{item[0]}')
                 )
+'''
 
 def parse_time(date_str: str) -> int:
     '''
@@ -401,15 +403,15 @@ async def html2db(dump_path='b', db_url='ii.db'):
         await db.close()
         return
 
-    for board in all_boards:
-        if await db.find_board_by_name(board[0]):
+    for sfx, desc in all_boards:
+        if await db.find_board_by_name(sfx):
             continue
 
-        await db.add_board(board[0], board[1])
+        await db.add_board(sfx, desc)
     
     board_name = dump_folder.name
     
-    board_id = await db.find_board_by_name(board_name)
+    board_id = await db.find_board_by_name(board_name.replace('_arch', '/arch'))
 
     if not board_id:
         log.error(f'{board_name}: invalid board name')
