@@ -81,7 +81,7 @@ def scroll_to_post(post_id: int):
         """
         ui.run_javascript(js)
     else:
-        ui.navigate.to("%s" % post_id)  # FIXME
+        ui.navigate.to(str(post_id))
 
 
 def render_post_text(text: str):
@@ -166,9 +166,7 @@ def render_post(post, disable_menu=False):
                 # found in db blobs
                 file_url = thumb_url = f"/res/{file['seq']}"
 
-            elif cache_files.get(post["board"]) and cache_files["board"].get(
-                file["file_name"]
-            ):  # FIXME
+            elif file["file_name"] in cache_files.get(post["board"], {}):
                 # found in cache_files
                 file_url = thumb_url = f"/res/{post['board']}/{file['file_name']}"
 
@@ -547,9 +545,7 @@ async def db_search():
     with stats_row:
         with (
             ui.column()
-            .style(
-                "color: black; padding: 30px; border-radius: 15px; font-size: 24px;"
-            )  # FIXME
+            .style("color: black; padding: 30px; border-radius: 15px; font-size: 16px;")
             .classes("bg-gray-500 text-white")
         ):
             ui.label("%s stats:" % args.db)
