@@ -1,7 +1,7 @@
 [project]
 name = "iv"
-version = "0.3.0"
-description = "(WIP) imageboard viewer"
+version = "0.4.0"
+description = "imageboard viewer"
 readme = "README.md"
 requires-python = "==3.13.*"
 dependencies = [
@@ -16,3 +16,12 @@ dependencies = [
     "stopwatch-py==2.0.1",
     "tortoise-orm==0.25.1",
 ]
+
+[tool.uv]
+dev-dependencies = [
+    "ruff"
+]
+
+[tool.ruff.format]
+quote-style = "single"
+line-ending = "lf"
