@@ -9,6 +9,7 @@ from tortoise.transactions import in_transaction
 from tortoise.expressions import Q, Case, When, Value
 from tortoise.models import Model
 
+
 class Board(Model):
     seq = fields.IntField(pk=True)
     name = fields.CharField(max_length=255, unique=True)
@@ -17,9 +18,12 @@ class Board(Model):
     class Meta:
         table = "boards"
 
+
 class Thread(Model):
     seq = fields.IntField(pk=True)
-    board = fields.ForeignKeyField("models.Board", related_name="threads", on_delete=fields.CASCADE)
+    board = fields.ForeignKeyField(
+        "models.Board", related_name="threads", on_delete=fields.CASCADE
+    )
     first_id = fields.IntField()
     title = fields.CharField(max_length=255, null=True)
 
@@ -27,10 +31,15 @@ class Thread(Model):
         table = "threads"
         unique_together = (("board", "first_id"),)
 
+
 class Post(Model):
     seq = fields.IntField(pk=True)
-    board = fields.ForeignKeyField("models.Board", related_name="posts", on_delete=fields.CASCADE)
-    thread = fields.ForeignKeyField("models.Thread", related_name="posts", on_delete=fields.CASCADE)
+    board = fields.ForeignKeyField(
+        "models.Board", related_name="posts", on_delete=fields.CASCADE
+    )
+    thread = fields.ForeignKeyField(
+        "models.Thread", related_name="posts", on_delete=fields.CASCADE
+    )
     post_id = fields.IntField()
     author = fields.CharField(max_length=255, null=True)
     text = fields.TextField()
@@ -40,9 +49,15 @@ class Post(Model):
         table = "posts"
         unique_together = (("board", "post_id"),)
 
+
 class Attachment(Model):
     seq = fields.IntField(pk=True)
-    post_seq = fields.ForeignKeyField("models.Post", related_name="attachments", on_delete=fields.CASCADE, source_field="post_seq")
+    post_seq = fields.ForeignKeyField(
+        "models.Post",
+        related_name="attachments",
+        on_delete=fields.CASCADE,
+        source_field="post_seq",
+    )
     file_type = fields.CharField(max_length=100, null=True)
     file_name = fields.CharField(max_length=255, null=True)
     file_url = fields.CharField(max_length=500, null=True)
@@ -52,17 +67,21 @@ class Attachment(Model):
     class Meta:
         table = "attachments"
 
+
 def dial():
     # returns db backend (postgres, sqlite)
     conn = Tortoise.get_connection("default")
     return conn.capabilities.dialect
 
+
 async def init(url: str) -> None:
-    await Tortoise.init(db_url=url, modules={'models': ['db']})
+    await Tortoise.init(db_url=url, modules={"models": ["db"]})
     await Tortoise.generate_schemas()
+
 
 async def close() -> None:
     await Tortoise.close_connections()
+
 
 async def stats():
     q = """
@@ -89,18 +108,27 @@ async def stats():
     rows = await conn.execute_query_dict(q)
     return rows
 
+
 async def find_file_by_seq(post_seq: int):
-    qs = Attachment.filter(seq=post_seq).values_list("file_type", "file_data", flat=False)
+    qs = Attachment.filter(seq=post_seq).values_list(
+        "file_type", "file_data", flat=False
+    )
     r = await qs
     return r[0] if r else None
+
 
 async def find_board_by_name(name: str) -> int | None:
     qs = Board.filter(name=name).only("seq").first()
     r = await qs
     return r.seq if r else None
 
+
 async def find_thread_by_seq(board_id: int, thread_seq: int):
-    thread = await Thread.filter(seq=thread_seq, board_id=board_id).only("seq", "title").first()
+    thread = (
+        await Thread.filter(seq=thread_seq, board_id=board_id)
+        .only("seq", "title")
+        .first()
+    )
     if not thread:
         return None
 
@@ -129,8 +157,8 @@ async def find_thread_by_seq(board_id: int, thread_seq: int):
         Attachment.filter(post_seq__seq__in=list(posts_dict.keys()))
         .annotate(
             has_file_data=Case(
-                When(file_data__not_isnull=True, then=Value('true')),
-                default=Value('false')
+                When(file_data__not_isnull=True, then=Value("true")),
+                default=Value("false"),
             )
         )
         .values(
@@ -140,28 +168,33 @@ async def find_thread_by_seq(board_id: int, thread_seq: int):
             "file_name",
             "thumb_url",
             "file_type",
-            "has_file_data"
+            "has_file_data",
         )
     )
 
     async for a in attachments_qs:
         if a["file_url"]:
-            posts_dict[a["post_seq__seq"]]["files"].append({
-                "seq": a["seq"],
-                "url": a["file_url"],
-                "file_name": a["file_name"],
-                "thumb": a["thumb_url"],
-                "file_type": a["file_type"],
-                "file_data": True if a["has_file_data"] == 'true' else False
-            })
+            posts_dict[a["post_seq__seq"]]["files"].append(
+                {
+                    "seq": a["seq"],
+                    "url": a["file_url"],
+                    "file_name": a["file_name"],
+                    "thumb": a["thumb_url"],
+                    "file_type": a["file_type"],
+                    "file_data": True if a["has_file_data"] == "true" else False,
+                }
+            )
 
     thread_dict["posts"] = list(posts_dict.values())
     return thread_dict
 
+
 async def find_thread_by_post(board_id: int, post_id: int):
-    post = await Post.filter(
-        Q(post_id=post_id) & Q(board__seq=board_id)
-    ).select_related("thread").first()
+    post = (
+        await Post.filter(Q(post_id=post_id) & Q(board__seq=board_id))
+        .select_related("thread")
+        .first()
+    )
 
     if not post:
         return None
@@ -170,14 +203,15 @@ async def find_thread_by_post(board_id: int, post_id: int):
 
     return await find_thread_by_seq(board_id, thread_id)
 
+
 async def find_posts_by_text(
-        TEXT: str, 
-        LIMIT: int = 50, 
-        OFFSET: int = 0,
-        RANK: bool = True,
-        BYWORDS: bool = False,
-        BOARDS: list[int] = []
-    ):
+    TEXT: str,
+    LIMIT: int = 50,
+    OFFSET: int = 0,
+    RANK: bool = True,
+    BYWORDS: bool = False,
+    BOARDS: list[int] = [],
+):
     total_count = 0
     posts = []
 
@@ -192,37 +226,43 @@ async def find_posts_by_text(
             Q(text__icontains=TEXT) & Q(thread__board_id__in=BOARDS)
         ).count()
 
-        query = Post.filter(
-            Q(text__icontains=TEXT) & Q(thread__board_id__in=BOARDS)
-        ).prefetch_related("attachments", "thread__board").order_by("seq").offset(OFFSET).limit(LIMIT)
+        query = (
+            Post.filter(Q(text__icontains=TEXT) & Q(thread__board_id__in=BOARDS))
+            .prefetch_related("attachments", "thread__board")
+            .order_by("seq")
+            .offset(OFFSET)
+            .limit(LIMIT)
+        )
 
         result = await query
 
         for idx, post in enumerate(result, start=1 + OFFSET):
-            posts.append({
-                "author": post.author,
-                "id": post.post_id,
-                "index": idx,
-                "text": post.text,
-                "time": post.time,
-                "board": post.thread.board.name,
-                "source": "db",
-                "files": [
-                    {
-                        "seq": att.seq,
-                        "url": att.file_url,
-                        "thumb": att.thumb_url,
-                        "file_name": att.file_name,
-                        "file_type": att.file_type,
-                        "file_data": att.file_data is not None
-                    }
-                    for att in post.attachments
-                ]
-            })
+            posts.append(
+                {
+                    "author": post.author,
+                    "id": post.post_id,
+                    "index": idx,
+                    "text": post.text,
+                    "time": post.time,
+                    "board": post.thread.board.name,
+                    "source": "db",
+                    "files": [
+                        {
+                            "seq": att.seq,
+                            "url": att.file_url,
+                            "thumb": att.thumb_url,
+                            "file_name": att.file_name,
+                            "file_type": att.file_type,
+                            "file_data": att.file_data is not None,
+                        }
+                        for att in post.attachments
+                    ],
+                }
+            )
 
     else:
-        if d == 'postgres':
-            raise Exception('postgres comming soon')
+        if d == "postgres":
+            raise Exception("postgres comming soon")
 
         # === FTS5 via raw SQL ===
         placeholders = ",".join(["?"] * len(BOARDS))
@@ -262,7 +302,7 @@ async def find_posts_by_text(
                 JOIN boards b ON t.board_id = b.seq
                 WHERE posts_fts MATCH ?
                 AND b.seq IN ({placeholders})
-                ORDER BY {'rank' if RANK else 'p.seq'} ASC
+                ORDER BY {"rank" if RANK else "p.seq"} ASC
                 LIMIT ? OFFSET ?;
             """
             params = [TEXT] + BOARDS + [LIMIT, OFFSET]
@@ -280,77 +320,85 @@ async def find_posts_by_text(
                         "time": row["time"],
                         "board": row["board"],
                         "source": "db",
-                        "files": []
+                        "files": [],
                     }
                 if row["file_url"]:
-                    posts_dict[pid]["files"].append({
-                        "seq": row["file_seq"],
-                        "url": row["file_url"],
-                        "thumb": row["thumb_url"],
-                        "file_name": row["file_name"],
-                        "file_type": row["file_type"],
-                        "file_data": row["file_data"] is not None
-                    })
+                    posts_dict[pid]["files"].append(
+                        {
+                            "seq": row["file_seq"],
+                            "url": row["file_url"],
+                            "thumb": row["thumb_url"],
+                            "file_name": row["file_name"],
+                            "file_type": row["file_type"],
+                            "file_data": row["file_data"] is not None,
+                        }
+                    )
             posts = list(posts_dict.values())
 
     sw.stop()
     log.trace(f"{TEXT}: {len(posts)} in {str(sw)}")
     return total_count, posts
 
-async def add_board(name: str, description: str = '') -> int:
+
+async def add_board(name: str, description: str = "") -> int:
     board = await Board.create(name=name, description=description)
-    log.trace(f'board {name} created')
+    log.trace(f"board {name} created")
     return board.seq
+
 
 async def add_thread(board_id: int, first_id: int, title: str) -> int:
     existing = await Thread.filter(board_id=board_id, first_id=first_id).first()
     if existing:
-        log.trace(f'found dub: fid:{first_id} on bid:{board_id}')
+        log.trace(f"found dub: fid:{first_id} on bid:{board_id}")
         return existing.seq
 
     thread = await Thread.create(board_id=board_id, first_id=first_id, title=title)
     return thread.seq
 
-async def add_posts(board_id: int, thread_id: int, posts: list = [], path: str = ''):
+
+async def add_posts(board_id: int, thread_id: int, posts: list = [], path: str = ""):
     for post in posts or []:
-        existing = await Post.filter(post_id=post['id'], board_id=board_id).first()
+        existing = await Post.filter(post_id=post["id"], board_id=board_id).first()
         if existing:
-            log.trace(f'found dub: tid:{thread_id} on bid:{board_id}')
+            log.trace(f"found dub: tid:{thread_id} on bid:{board_id}")
             continue
 
         new_post = await Post.create(
             board_id=board_id,
             thread_id=thread_id,
-            post_id=post['id'],
-            author=post.get('author'),
-            text=post.get('text', ''),
-            time=post.get('time')
+            post_id=post["id"],
+            author=post.get("author"),
+            text=post.get("text", ""),
+            time=post.get("time"),
         )
 
-        for file in post.get('files', []):
+        for file in post.get("files", []):
             file_data = None
-            file_type = file.get('file_type') or None
-            file_name = file['url'].split('/')[-1]
+            file_type = file.get("file_type") or None
+            file_name = file["url"].split("/")[-1]
 
             if path:
                 p = Path(path)
-                f_path_list = [f for f in p.iterdir() if f.is_file() and f.name == file_name]
+                f_path_list = [
+                    f for f in p.iterdir() if f.is_file() and f.name == file_name
+                ]
                 if f_path_list:
                     f_path = f_path_list[0]
                     kind = filetype.guess(f_path)
                     if kind:
                         file_type = kind.mime
-                        with open(f_path, 'rb') as f:
+                        with open(f_path, "rb") as f:
                             file_data = f.read()
 
             await Attachment.create(
                 post_seq=new_post,
                 file_type=file_type,
                 file_name=file_name,
-                file_url=file.get('url'),
-                thumb_url=file.get('thumb'),
-                file_data=file_data
+                file_url=file.get("url"),
+                thumb_url=file.get("thumb"),
+                file_data=file_data,
             )
+
 
 async def create():
     pg_sch = """
@@ -520,12 +568,12 @@ async def create():
     d = dial()
 
     match d:
-        case 'sqlite':
+        case "sqlite":
             await c.execute_script(sq3_sch)
-            return 'sqlite'
-        case 'postgres':
+            return "sqlite"
+        case "postgres":
             await c.execute_script(pg_sch)
-            return 'postgres'
+            return "postgres"
         case _:
-            log.error(f'{d} not supported')
+            log.error(f"{d} not supported")
             return False
