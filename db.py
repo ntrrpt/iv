@@ -1,5 +1,4 @@
-import os, requests, filetype
-import util, yk
+import filetype
 
 from loguru import logger as log
 from stopwatch import Stopwatch
@@ -8,7 +7,6 @@ from pathlib import Path
 from tortoise import Tortoise, fields, connections
 from tortoise.transactions import in_transaction
 from tortoise.expressions import Q, Case, When, Value
-from tortoise.functions import Count
 from tortoise.models import Model
 
 class Board(Model):

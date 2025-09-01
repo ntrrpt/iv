@@ -1,14 +1,17 @@
-import util, db
-import requests, re, mimetypes, argparse
+import util
+import db
+import requests
+import re
+import mimetypes
+import argparse
 import dateparser
 import subprocess
-import os, sys
-from stopwatch import Stopwatch
-
+import os
+import sys
 import asyncio
-
 import warnings
 
+from stopwatch import Stopwatch
 from loguru import logger as log
 from pathlib import Path
 from bs4 import BeautifulSoup
@@ -278,7 +281,7 @@ def parse_catalog(html_str: str) -> dict:
     util.text_write('cat.txt', html_str)
     soup = BeautifulSoup(html_str, "html.parser")
     res = soup.find_all("div", id=lambda v: v and v.startswith("thread-"))
-    r = [yk_parse_thread(str(x)) for x in res]
+    r = [parse_thread(str(x)) for x in res]
     return r
 
 def parse_skipped(skip_str: str) -> tuple:

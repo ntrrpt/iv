@@ -7,18 +7,17 @@ todo:
     - fix html in posts
     - disable displaying pics ???????
 '''
-from tortoise import Tortoise
 from nicegui import app, ui
 from fastapi import HTTPException
 from fastapi.responses import Response, FileResponse
 from contextlib import suppress
 from loguru import logger as log
-from datetime import timedelta
 from pathlib import Path
 from stopwatch import Stopwatch
-import argparse, os
-import pprint, requests, sys, os, mimetypes
-import util, db, yk
+import argparse
+import sys
+import util
+import db
 
 log.add('iv.txt')
 
