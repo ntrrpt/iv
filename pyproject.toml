@@ -5,16 +5,18 @@ description = "imageboard viewer"
 readme = "README.md"
 requires-python = "==3.13.*"
 dependencies = [
+    "aiohttp-socks>=0.10.1",
     "asyncpg>=0.30.0",
     "bs4==0.0.2",
     "dateparser==1.2.2",
     "filetype==1.2.0",
     "loguru==0.7.3",
     "nicegui==2.22.2",
-    "pywebview==6.0",
+    "pysocks>=1.7.1",
     "requests==2.32.4",
     "stopwatch-py==2.0.1",
     "tortoise-orm==0.25.1",
+    "yarl>=1.20.1",
 ]
 
 [tool.uv]

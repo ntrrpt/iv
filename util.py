@@ -1,12 +1,22 @@
 from loguru import logger as log
 from datetime import datetime
+from pathlib import Path
+
 import subprocess
 import mimetypes
-import pathlib
 import sys
 import pprint
 import shutil
 import base64
+import requests
+import time
+import os
+
+from email.utils import parsedate_to_datetime
+import asyncio
+import aiofiles
+from aiohttp_socks import ProxyConnector
+import aiohttp
 
 aria2c_args = [
     'aria2c',
@@ -47,6 +57,81 @@ for ext, mime in ext_2_mime.items():
 via_exts = [video_exts + image_exts + audio_exts]
 
 
+def get_with_retries(url, max_retries=5, retry_delay=10, proxy='', headers={}):
+    proxies = {'http': proxy, 'https': proxy} if proxy else None
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            r = requests.get(url, proxies=proxies, headers=headers, timeout=15)
+            r.raise_for_status()
+            return r
+        except requests.exceptions.HTTPError as e:
+            raise Exception('http failed:', e, '| status:', r.status_code)
+        except requests.exceptions.RequestException as e:
+            log.warning(f'attempt {attempt} failed: {e}. retrying...')
+            time.sleep(retry_delay)
+    raise Exception(f'failed {url} after {max_retries} tries')
+
+
+async def dw_files(
+    urls, dest_folder, proxy=None, concurrency=5, max_retries=5, retry_delay=10
+):
+    Path(dest_folder).mkdir(parents=True, exist_ok=True)
+
+    connector = ProxyConnector.from_url(proxy) if proxy else None
+    sem = asyncio.Semaphore(concurrency)
+
+    async with aiohttp.ClientSession(connector=connector) as session:
+        tasks = [
+            _dw_file(session, url, dest_folder, sem, max_retries, retry_delay)
+            for url in urls
+        ]
+        await asyncio.gather(*tasks)
+
+
+async def _dw_file(session, url, dest_folder, sem, max_retries, retry_delay):
+    filename = Path(url).name
+    dest_path = Path(dest_folder) / filename
+
+    if dest_path.is_file():
+        log.info(dest_path)
+        return
+
+    async with sem:
+        for attempt in range(1, max_retries + 1):
+            try:
+                async with session.get(url) as r:
+                    if r.status == 404:
+                        log.error(f'{url} (404)')
+                        return
+
+                    r.raise_for_status()
+                    async with aiofiles.open(dest_path, mode='wb') as f:
+                        await f.write(await r.read())
+
+                    if 'Last-Modified' in r.headers:
+                        lm = r.headers['Last-Modified']
+                        dt = parsedate_to_datetime(lm)
+                        ts = dt.timestamp()
+                        os.utime(dest_path, (ts, ts))
+
+                    log.success(dest_path)
+                    return
+
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                log.warning(f'{dest_path} (attempt {attempt}/{max_retries}): {e}')
+
+                if attempt >= max_retries:
+                    log.error(f'failed {url} after {max_retries} попыток')
+                    return
+
+                await asyncio.sleep(retry_delay)
+
+            except Exception as e:
+                log.opt(exception=True).error(f'{url}: {e}')
+                return
+
+
 def posts_by_id(posts: list):
     return {int(p['id']): p for p in posts}
 
@@ -78,7 +163,7 @@ def write(path, data, end='\n'):
 
 
 def delete(path):
-    rem_file = pathlib.Path(path)
+    rem_file = Path(path)
     rem_file.unlink(missing_ok=True)
     log.trace(f'{path} deleted')
 
