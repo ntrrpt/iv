@@ -7,7 +7,6 @@ import mimetypes
 import sys
 import pprint
 import shutil
-import base64
 import requests
 import time
 import os
@@ -17,24 +16,6 @@ import asyncio
 import aiofiles
 from aiohttp_socks import ProxyConnector
 import aiohttp
-
-aria2c_args = [
-    'aria2c',
-    '--max-connection-per-server=5',
-    '--max-concurrent-downloads=5',
-    '--auto-file-renaming=false',
-    '--remote-time=true',
-    '--log-level=error',
-    '--console-log-level=error',
-    '--download-result=hide',
-    '--summary-interval=0',
-    '--file-allocation=none',
-    '--continue=true',
-    '--check-certificate=false',
-    '--allow-overwrite=false',
-    '--quiet=true',
-    '-Z',
-]
 
 ext_2_mime = mimetypes.types_map
 mime_2_ext = {}
@@ -136,12 +117,7 @@ def posts_by_id(posts: list):
     return {int(p['id']): p for p in posts}
 
 
-def image_from_bytes(data: bytes, mime_type: str):
-    encoded = base64.b64encode(data).decode('utf-8')
-    return f'data:{mime_type};base64,{encoded}'
-
-
-def float_fmt(number, digits):
+def float_fmt(number: int, digits: int):
     return f'{number:.{digits}f}'
 
 
@@ -150,44 +126,45 @@ def stamp_fmt(timestamp: int) -> str:
     return dt.strftime('%H:%M:%S %d/%m/%Y')
 
 
-def append(path, data, end='\n'):
+def append(path: Path | str, data: str, end: str = '\n'):
+    path = Path(path)
     with open(path, 'a', encoding='utf-8') as f:
         f.write(data + end)
-    log.trace(f'{path} appended')
 
 
-def write(path, data, end='\n'):
+def write(path: Path | str, data: str, end: str = '\n'):
+    path = Path(path)
     with open(path, 'w', encoding='utf-8') as f:
         f.write(data + end)
-    log.trace(f'{path} writed')
 
 
-def delete(path):
+def delete(path: Path | str):
+    path = Path(path)
     rem_file = Path(path)
     rem_file.unlink(missing_ok=True)
     log.trace(f'{path} deleted')
 
 
-def pw(path, data, end='\n'):
+def pw(path: Path | str, data: str, end: str = '\n'):
+    path = Path(path)
     s = str(pprint.pformat(str(data)))
     write(path, s, end)
     log.trace(f'{path} pwd')
 
 
-def pp(data):
+def pp(data: str):
     s = pprint.pformat(str(data))
     print(s)
 
 
-def pf(data):
+def pf(data: str):
     return str(pprint.pformat(str(data)))
 
 
-def die(s=''):
+def die(s: str = ''):
     if s:
         log.critical(str(s))
-    sys.exit()
-
+    sys.exit(1)
 
 def is_aria2c_available():
     if shutil.which('aria2c') is None:

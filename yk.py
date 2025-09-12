@@ -9,14 +9,15 @@ import subprocess
 import os
 import sys
 import asyncio
-import warnings
+import warnings, json
 
 from stopwatch import Stopwatch
 from loguru import logger as log
 from pathlib import Path
 from bs4 import BeautifulSoup
+from yarl import URL
 
-SITE = 'http://ii.yakuji.moe'
+SITE = URL('http://ii.yakuji.moe')
 
 # fmt: off
 main_boards = [
@@ -129,120 +130,68 @@ main_sfxs = [x[0] for x in main_boards]
 arch_sfxs = [x[0] for x in arch_boards]
 all_sfxs = main_sfxs + arch_sfxs
 
-
-def yakuify(s):
-    return ''.join([SITE, s])
-
-
 def dump(sfx, from_to):
-    def dump_thread(t_url, board_sfx):
-        img_urls = []
-
-        while True:
-            try:
-                r = requests.get(t_url)
-                break
-            except Exception as e:
-                log.error(str(e))
-
-        soup = BeautifulSoup(r.text, 'html.parser')
-        htm_urls = [
-            x.get('href') for x in soup.find_all('a') if x.get('href') is not None
-        ]
-
-        for htm in htm_urls:
-            g = [  # must be all true
-                htm.startswith(f'/{board_sfx}/src/'),
-                htm.endswith(tuple(util.exts)),
-                'iichan' not in htm,
-                'desuchan' not in htm,
-            ]
-
-            if all(g):
-                img_urls.append('http://ii.yakuji.moe' + htm)
-
-        img_urls = list(set(img_urls))
-        img_urls.append(t_url)
-        subprocess.run(util.aria2c_args + img_urls)
-
     if sfx not in all_sfxs:
         log.error('invalid board')
         return
 
-    if not util.is_aria2c_available():
-        log.error('no aria2c detected ;C')
-        sys.exit()
+    url = SITE / sfx
 
-    url = yakuify(sfx)
+    r = util.get_with_retries(url, proxy=args.proxy)
+    soup = BeautifulSoup(r.text, 'html.parser')
 
     fr, to = from_to.split('-')
-    fr_to = [x for x in range(int(fr), int(to))]
+    fr_range = [x for x in range(int(fr), int(to))]
 
-    soup = BeautifulSoup(requests.get(url).text, 'html.parser')
+    ###########################################################################
 
-    pages = ['wakaba.html' if 'arch' in sfx else 'index.html']  # num of pages
-    _0_9999 = tuple([str(x) for x in range(9999)])
+    pages = []
 
-    for sp in soup.find_all('a'):
-        href = sp.get('href')
-        if not href:
-            continue
+    if fr == '0':
+        pages += [url / ('wakaba.html' if 'arch' in sfx else 'index.html')]
 
-        href = href.removeprefix('/%s/' % sfx)
-        if href.startswith(_0_9999) and href.endswith('.html'):
-            pages.append(href)
+    for td in soup.find_all("td"):
+        for a in td.find_all("a"):
+            text = a.get_text(strip=True)
+            if text.isdigit() and int(text) in fr_range:
+                pages.append(url / a.get("href"))
+
+    ###########################################################################
 
     threads = []
 
     for i, page in enumerate(pages):
-        if i not in fr_to:
-            continue
+        r = util.get_with_retries(page, proxy=args.proxy)
+        catalog = parse_catalog(r.text)
 
-        while True:
-            try:
-                u = '/'.join([url, page])
-                r = requests.get(u)
-                break
-            except Exception as e:
-                log.error(str(e))
+        for th in catalog:
+            threads.append(url / 'res' / f'{th['id']}.html')
 
-        soup = BeautifulSoup(r.text, 'html.parser')
-        htm_urls = [
-            x.get('href') for x in soup.find_all('a') if x.get('href') is not None
-        ]
+        log.info('%4s / %s, %s found' % (i + 1, len(pages), len(threads)))
 
-        for htm in htm_urls:
-            # /ph/arch/res/10852.html => ./res/10852.html (for arch)
-            htm = htm.replace('/%s' % sfx, '.')
+    ###########################################################################
 
-            g = [
-                htm.endswith('.html'),
-                htm.startswith('./res/'),
-                'iichan' not in htm,
-                'desuchan' not in htm,
-            ]
+    for i, thread in enumerate(threads):
+        log.info('%4s / %s, %s' % (i + 1, len(threads), thread))
 
-            if all(g):
-                threads.append(url + htm[1:])
+        th_id = thread.name.removesuffix(".html")
+        th_path = Path(sfx) / th_id
+        th_path.mkdir(parents=True, exist_ok=True)
 
-        log.info(f'{i + 1} / {len(pages)}, {len(threads)} found')
+        img_urls = []
 
-    d = sfx.replace('/', '_')
-    os.makedirs(d, exist_ok=True)
-    os.chdir(d)
+        r = util.get_with_retries(thread, proxy=args.proxy)
+        util.write(th_path / f'{th_id}.html', r.text)
 
-    for ii, thread in enumerate(threads):
-        log.info(f'{ii + 1} / {len(threads)}, {thread}')
+        th = parse_thread(r.text)
+        json_data = json.dumps(th, indent=4, ensure_ascii=False)
+        util.write(th_path / f'{th_id}.json', str(json_data))
 
-        num = thread[thread.rfind('/') + 1 : -5]
-        os.makedirs(num, exist_ok=True)
+        for post in th.get('posts', {}):
+            for file in post.get('files', {}):
+                img_urls.append(file['url'])
 
-        os.chdir(num)
-        dump_thread(thread, sfx)
-        os.chdir('..')
-
-    os.chdir('..')
-
+        asyncio.run(util.dw_files(img_urls, dest_folder=th_path, proxy=args.proxy))
 
 def parse_time(date_str: str) -> int:
     """
@@ -256,10 +205,10 @@ def parse_time(date_str: str) -> int:
 def parse_file(file_str):
     try:
         t = file_str.find('span', class_='filesize').find('a')['href']
-        file_url = yakuify(t)
+        file_url = str(SITE) + t
 
         t = file_str.find('img', class_='thumb')['src']
-        thumb_url = yakuify(t)
+        thumb_url = str(SITE) + t
 
         mime_type, _ = mimetypes.guess_type(file_url)
 
@@ -269,14 +218,13 @@ def parse_file(file_str):
             'file_type': mime_type,
             'has_blob': False,
         }
-    except:
+    except (TypeError, AttributeError):
         r = {}
 
     return r
 
 
 def parse_catalog(html_str: str) -> dict:
-    util.text_write('cat.txt', html_str)
     soup = BeautifulSoup(html_str, 'html.parser')
     res = soup.find_all('div', id=lambda v: v and v.startswith('thread-'))
     r = [parse_thread(str(x)) for x in res]
@@ -473,51 +421,30 @@ if __name__ == '__main__':
     warnings.filterwarnings('ignore', category=DeprecationWarning)
 
     ap = argparse.ArgumentParser(description='ii.yakuji.moe tools')
-    ap.add_argument(
-        '-v',
-        '--verbose',
-        action='store_true',
-        default=False,
-        help='verbose output (traces)',
-    )
+    add = ap.add_argument
+    evg = os.environ.get
+
+    # fmt: off
+    add('-v', '--verbose', action='store_true', default=False, help='verbose output (traces)')
 
     g = ap.add_argument_group('html2db options')
-    g.add_argument(
-        '-p',
-        '--path',
-        nargs='+',
-        type=str,
-        help="""
+    add = g.add_argument
+    add('-p', '--path', nargs='+', type=str, help="""
         [toggle] input dirs with thread folders 
         (<board_prefix>/<thread_id>/<thread_id>.html, 
         b/1182145/1182145.html)
-        """,
+        """
     )
-    g.add_argument(
-        '--db', type=str, help="database output url ('postgres://', 'sqlite://')"
-    )
-    g.add_argument(
-        '--files', action='store_true', default=False, help='add file blobs to db'
-    )
+    add('--db', type=str, help="database output url ('postgres://', 'sqlite://')")
+    add('--files', action='store_true', default=False, help='add file blobs to db')
 
     g = ap.add_argument_group('dumper options')
-    g.add_argument(
-        '-s',
-        '--sfx',
-        type=str,
-        nargs='+',
-        help="""
-        [toggle] boards to dump (azu, arch/ls)
-        """,
-    )
-    g.add_argument(
-        '--range',
-        type=str,
-        default='0-9999',
-        help="""
-        pages to dump, default 0-9999 (from-to, 0-5, 20-30)
-        """,
-    )
+    add = g.add_argument
+    
+    add('-s', '--sfx', type=str, nargs='+', help="[toggle] boards to dump (azu, arch/ls)")
+    add('-r', '--range', type=str, default='0-9999', help="pages to dump, default 0-9999 (from-to, 0-5, 20-30)")
+    add('--proxy', type=str, default=str(evg("IV_PROXY", '')))
+    # fmt: on
 
     args = ap.parse_args()
 
@@ -549,13 +476,7 @@ if __name__ == '__main__':
         else:
             db_url = args.db
 
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        loop.run_until_complete(html2db(path, db_url))
+        asyncio.run(html2db(path, db_url))
 
 """
 todo: catalog
