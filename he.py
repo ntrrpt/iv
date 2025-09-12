@@ -103,13 +103,11 @@ def dump(sfx, from_to):
     op_posts: list[Post] = []
 
     for pg in pages:
-        r = util.get_with_retries(pg, proxy=args.proxy)
-        soup = BeautifulSoup(r.text, 'html.parser')
-
         log.info('%3s / %s' % (pages.index(pg) + 1, len(pages)))
 
+        r = util.get_with_retries(pg, proxy=args.proxy)
+        soup = BeautifulSoup(r.text, 'html.parser')
         op_posts += parse_posts(soup, divs='div.post.op')
-
         delay(1)
 
     threads = [url / 'koko.php' % {'res': p.num} for p in op_posts]
@@ -126,8 +124,7 @@ def dump(sfx, from_to):
         json_data = json.dumps(
             [p.to_dict() for p in posts], indent=4, ensure_ascii=False
         )
-        with open(th_folder / f'{th_id}.json', 'w') as f:
-            f.write(str(json_data))
+        util.write(th_folder / f'{th_id}.json', str(json_data))
 
         images = [p.file_url for p in posts if p.file_url]
         asyncio.run(util.dw_files(images, dest_folder=th_folder, proxy=args.proxy))
