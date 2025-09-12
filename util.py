@@ -166,18 +166,6 @@ def die(s: str = ''):
         log.critical(str(s))
     sys.exit(1)
 
-def is_aria2c_available():
-    if shutil.which('aria2c') is None:
-        return False
-
-    try:
-        r = subprocess.run(
-            ['aria2c', '--version'], capture_output=True, text=True, check=True
-        )
-        return 'aria2' in r.stdout.lower()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
-
 
 if __name__ in '__main__':
     print('%s: %s' % ('ext_2_mime', ext_2_mime))
