@@ -345,7 +345,7 @@ def parse_thread(html: str) -> dict:
     return thread
 
 
-async def html2db(dump_path='b', db_url='ii.db'):
+async def make_db(dump_path='b', db_url='ii.db'):
     dump_folder = Path(dump_path)
 
     if not dump_folder.exists():
@@ -477,7 +477,7 @@ if __name__ == '__main__':
         else:
             db_url = args.db
 
-        asyncio.run(html2db(path, db_url))
+        asyncio.run(make_db(path, db_url))
 
 """
 todo: catalog
