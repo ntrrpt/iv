@@ -130,6 +130,7 @@ main_sfxs = [x[0] for x in main_boards]
 arch_sfxs = [x[0] for x in arch_boards]
 all_sfxs = main_sfxs + arch_sfxs
 
+
 def dump(sfx, from_to):
     if sfx not in all_sfxs:
         log.error('invalid board')
@@ -150,11 +151,11 @@ def dump(sfx, from_to):
     if fr == '0':
         pages += [url / ('wakaba.html' if 'arch' in sfx else 'index.html')]
 
-    for td in soup.find_all("td"):
-        for a in td.find_all("a"):
+    for td in soup.find_all('td'):
+        for a in td.find_all('a'):
             text = a.get_text(strip=True)
             if text.isdigit() and int(text) in fr_range:
-                pages.append(url / a.get("href"))
+                pages.append(url / a.get('href'))
 
     ###########################################################################
 
@@ -165,7 +166,7 @@ def dump(sfx, from_to):
         catalog = parse_catalog(r.text)
 
         for th in catalog:
-            threads.append(url / 'res' / f'{th['id']}.html')
+            threads.append(url / 'res' / f'{th["id"]}.html')
 
         log.info('%4s / %s, %s found' % (i + 1, len(pages), len(threads)))
 
@@ -174,7 +175,7 @@ def dump(sfx, from_to):
     for i, thread in enumerate(threads):
         log.info('%4s / %s, %s' % (i + 1, len(threads), thread))
 
-        th_id = thread.name.removesuffix(".html")
+        th_id = thread.name.removesuffix('.html')
         th_path = Path(sfx) / th_id
         th_path.mkdir(parents=True, exist_ok=True)
 
@@ -192,6 +193,7 @@ def dump(sfx, from_to):
                 img_urls.append(file['url'])
 
         asyncio.run(util.dw_files(img_urls, dest_folder=th_path, proxy=args.proxy))
+
 
 def parse_time(date_str: str) -> int:
     """
@@ -378,26 +380,25 @@ async def html2db(dump_path='b', db_url='ii.db'):
     sw_b.restart()
 
     for i, item in enumerate(threads, start=1):
-        html_files = [
-            f.name for f in item.iterdir() if f.is_file() and f.suffix == '.html'
-        ]
+        files = [f for f in item.iterdir() if f.is_file()]
 
-        if not html_files:
-            log.error(f'{item.name}: no html')
+        html_files = [f for f in files if f.name == f'{item.name}.html']
+        json_files = [f for f in files if f.name == f'{item.name}.json']
+
+        if json_files:
+            with open(json_files[0], 'r', encoding='utf-8') as f:
+                thread = json.load(f)
+
+        elif html_files:
+            with open(html_files[0], 'r', encoding='utf-8') as f:
+                thread = parse_thread(f.read())
+
+        else:
+            log.warning(f'{board_name}/{item.name}: no html/json lole')
             continue
 
-        if len(html_files) > 1:
-            log.error(f'{item.name}: too many htmls')
-            continue
-
-        html_file = item / html_files[0]
-
-        with open(html_file, 'r', encoding='utf-8') as f:
-            html_data = f.read()
-
-        thread = parse_thread(html_data)
         if not thread['posts']:
-            log.warning('no posts lole')
+            log.warning(f'{board_name}/{item.name}: no posts lole')
             continue
 
         first_post_id = thread['posts'][0]['id']
@@ -408,7 +409,7 @@ async def html2db(dump_path='b', db_url='ii.db'):
             board_id, thread_id, thread['posts'], item if args.files else ''
         )
 
-        log.info(f'{i} / {len(threads)}: {board_name}/{item.name}')
+        log.info('%5s / %s, %s/%s' % (i, len(threads), board_name, item.name))
 
     sw_b.stop()
     log.success(f'{dump_folder}: {str(sw_b)}')
@@ -440,7 +441,7 @@ if __name__ == '__main__':
 
     g = ap.add_argument_group('dumper options')
     add = g.add_argument
-    
+
     add('-s', '--sfx', type=str, nargs='+', help="[toggle] boards to dump (azu, arch/ls)")
     add('-r', '--range', type=str, default='0-9999', help="pages to dump, default 0-9999 (from-to, 0-5, 20-30)")
     add('--proxy', type=str, default=str(evg("IV_PROXY", '')))
