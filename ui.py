@@ -596,28 +596,18 @@ async def db_search():
 
 if __name__ in ['__main__', '__mp_main__']:
     ap = argparse.ArgumentParser(description='db viewer')
-    ap.add_argument(
-        '-p',
-        '--path',
-        type=str,
-        nargs='+',
-        help="""
+
+    # fmt: off
+    ap.add_argument('-p', '--path', type=str, nargs='+', help="""
             [repeatable] dir with thread files 
             (<board_prefix>/<thread_id>/<files>, 
             b/1182145/1461775075639.jpg)
-        """,
+        """
     )
-    ap.add_argument('--db', type=str, help='database file (*.db)')
-    ap.add_argument(
-        '--noblob', action='store_true', default=False, help='disable blobs'
-    )
-    ap.add_argument(
-        '-v',
-        '--verbose',
-        action='store_true',
-        default=False,
-        help='verbose output (traces)',
-    )
+    ap.add_argument('--db',            type=str,            help='database file (*.db)')
+    ap.add_argument('--noblob',        action='store_true', default=False, help='disable blobs')
+    ap.add_argument('-v', '--verbose', action='store_true', default=False, help='verbose output (traces)')
+    # fmt: on
 
     args = ap.parse_args()
 
