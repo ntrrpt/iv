@@ -6,7 +6,7 @@ from pathlib import Path
 
 from tortoise import Tortoise, fields, connections
 from tortoise.transactions import in_transaction
-from tortoise.expressions import Q, Case, When, Value, RawSQL
+from tortoise.expressions import Q, Case, When, Value
 from tortoise.models import Model
 
 

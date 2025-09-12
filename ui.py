@@ -155,7 +155,6 @@ def render_skipped(sk: str):
 
 
 def render_post(post, disable_menu=False):
-    rows = []
     with (
         ui.row()
         .classes('w-full items-start bg-gray-100 rounded p-2 gap-2')
@@ -337,7 +336,7 @@ async def db_thread(board: str, thread_id: int):
             pages = int(len(thread['posts']) / limit) + 1
 
             for i in range(min(10, pages)):
-                b = ui.button(
+                ui.button(
                     i,
                     on_click=lambda e, ii=i: (draw(ii)),
                     color='green' if i == page else 'primary',
