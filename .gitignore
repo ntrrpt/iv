@@ -17,6 +17,9 @@ wheels/
 
 # test dbs
 *.db
+*.db-shm
+*.db-wal
+
 
 # logs
 *.txt
