@@ -86,21 +86,25 @@ def scroll_to_post(post_id: int):
 
 def render_post_text(text: str):
     html_lines = []
+
     for line in text.split('\n'):
-        if line.strip().startswith('&gt;') and not line.strip().startswith(
-            '<p>&gt;&gt;'
-        ):
+        if line.strip().startswith('&gt;') and not line.strip().startswith('&gt;&gt;'):
             html_lines.append(
                 f'<div style="color:green; margin:0; padding:0;">{line}</div>'
             )
 
         elif line.startswith(('<p>&gt;&gt;', '&gt;&gt;')):
             try:
-                line = line.removeprefix('<p>&gt;&gt;').removesuffix('<br/>')
+                line = (
+                    line.removeprefix('<p>')
+                    .removeprefix('&gt;&gt;')
+                    .removesuffix('<br/>')
+                )
                 target_id = int(line)
-                link = ui.link('>>' + line, None)
+                link = ui.link('>>' + line, None).style(
+                    'color: deepskyblue; cursor: default; line-height: 0.5; text-decoration: none;'
+                )
 
-                # todo: try/raise, just blue label on non-ext posts
                 target_post = app.storage.client['posts_by_id'].get(target_id)
                 if target_post:
                     link.style(
@@ -112,33 +116,20 @@ def render_post_text(text: str):
                     with menu:
                         render_post(target_post, disable_menu=True)
 
-                    link.on(
-                        'click',
-                        lambda e, m=menu, tid=target_id: (
-                            m.close(),
-                            scroll_to_post(tid),
-                        ),
-                    ).classes('text-blue-600')
-
-                    link.on(
-                        'mouseenter',
-                        lambda e, m=menu, tid=target_id: (
-                            m.open(),
-                            ui.run_javascript(
-                                color_blank % (tid, '#78E800')  # green
+                    for event, action, color in [
+                        ('mouseenter', lambda m: m.open(),  '#78E800'),
+                        ('mouseleave', lambda m: m.close(), '#f3f4f6'), 
+                        ('click',      lambda m: m.close(), None),       
+                    ]:  # fmt: skip
+                        link.on(
+                            event,
+                            lambda e, m=menu, tid=target_id, ev=event, act=action, c=color: (
+                                act(m),
+                                scroll_to_post(tid) if ev == 'click' else ui.run_javascript(color_blank % (tid, c)),
                             ),
-                        ),
-                    )
+                        )  # fmt: skip
 
-                    link.on(
-                        'mouseleave',
-                        lambda e, m=menu, tid=target_id: (
-                            m.close(),
-                            ui.run_javascript(
-                                color_blank % (tid, '#f3f4f6')  # grey
-                            ),
-                        ),
-                    )
+                    link.classes('text-blue-600')
 
             except ValueError:
                 ui.label(line)
@@ -249,34 +240,20 @@ def render_post(post, disable_menu=False):
                         with menu:
                             render_post(target_post, disable_menu=True)
 
-                        link.on(
-                            'click',
-                            lambda e, m=menu, tid=target_post['id']: (
-                                m.close(),
-                                scroll_to_post(tid),
-                            ),
-                        ).classes('text-blue-600')
-
-                        link.on(
-                            'mouseenter',
-                            lambda e, m=menu, tid=target_post['id']: (
-                                m.open(),
-                                ui.run_javascript(
-                                    color_blank % (tid, '#78E800')  # green
+                        for event, action, color in [
+                            ('mouseenter', lambda m: m.open(),  '#78E800'),
+                            ('mouseleave', lambda m: m.close(), '#f3f4f6'), 
+                            ('click',      lambda m: m.close(), None),      
+                        ]:  # fmt: skip
+                            link.on(
+                                event,
+                                lambda e, m=menu, tid=target_post['id'], ev=event, act=action, c=color: (
+                                    act(m),
+                                    scroll_to_post(tid) if ev == 'click' else ui.run_javascript(color_blank % (tid, c)),
                                 ),
-                            ),
-                        )
+                            )  # fmt: skip
 
-                        link.on(
-                            'mouseleave',
-                            lambda e, m=menu, tid=target_post['id']: (
-                                m.close(),
-                                ui.run_javascript(
-                                    color_blank % (tid, '#f3f4f6')  # grey
-                                ),
-                            ),
-                        )
-
+                        link.classes('text-blue-600')
             ui.separator()
             ui.html(render_post_text(post['text'])).style('line-height: 1.1;')
 
@@ -369,7 +346,7 @@ async def db_thread(board: str, thread_id: int):
         )
 
         with ui.column().style('margin-top: -0.5em;'):
-            title = thread['title'] or f'{board}/{thread_id}'
+            title = thread['title'] or f'{board}/{thread["posts"][0]["id"]}'
             ui.label(title).classes('text-xl font-bold')
             ui.label(f'{len(thread["posts"])} posts').style('margin-top: -1em;')
             ui.page_title(title)
