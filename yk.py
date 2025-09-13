@@ -17,7 +17,7 @@ from bs4 import BeautifulSoup
 from yarl import URL
 
 SITE = URL('http://ii.yakuji.moe')
-res_pattern = re.compile(r'^/.+/res/\d+\.html#(\d+)$')
+res_pattern = re.compile(r'^/([^/]+)/res/(\d+)\.html(?:#(\d+))?$')
 
 # fmt: off
 main_boards = [
@@ -250,18 +250,18 @@ def parse_skipped(skip_str: str) -> tuple:
 
 
 def replace_res_links_with_text(html: str) -> str:
-    """
-    Принимает HTML-фрагмент, находит все ссылки вида /{board}/res/...#номер
-    и заменяет их на текст '>>номер'. Остальной HTML остаётся без изменений.
-    """
-    soup = BeautifulSoup(html, 'html.parser')
+    """replaces /board/res/thread.html[#post] with >>post or >>thread"""
+    soup = BeautifulSoup(html, "html.parser")
 
-    for a in soup.find_all('a', href=True):
+    for a in soup.find_all("a", href=True):
         match = res_pattern.match(a['href'])
         if match:
-            number = match.group(1)
-            # заменяем тег <a> на текст '>>номер'
-            a.replace_with(f'>>{number}')
+            board, thread_id, post_number = match.groups()
+            if post_number:   #1234
+                replacement = f">>{post_number}"
+            else:             #op
+                replacement = f">>{thread_id}"
+            a.replace_with(replacement)
 
     return str(soup)
 
@@ -291,7 +291,6 @@ def parse_thread(html: str) -> dict:
         if t:
             files.append(t)
 
-        # fixme:  <blockquote class="unkfunc">\ and oth
         bq = op.find('blockquote')
         text = bq.decode_contents()
         text = replace_res_links_with_text(text)
@@ -347,7 +346,6 @@ def parse_thread(html: str) -> dict:
             log.warning('no text in reply')
             continue
 
-        # fixme:  <blockquote class="unkfunc">\ and oth
         text = bq.decode_contents()
         text = replace_res_links_with_text(text)
 

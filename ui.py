@@ -96,7 +96,7 @@ def render_post_text(text: str):
 
         elif line.startswith(('<p>&gt;&gt;', '&gt;&gt;')):
             try:
-                line = line.removeprefix('<p>&gt;&gt;')
+                line = line.removeprefix('<p>&gt;&gt;').removesuffix('<br/>')
                 target_id = int(line)
                 link = ui.link('>>' + line, None)
 
@@ -230,7 +230,7 @@ def render_post(post, disable_menu=False):
                     if not reply['id']:  # skipped
                         continue
 
-                    if '>>%s' % post['id'] not in reply['text']:
+                    if '&gt;&gt;%s' % post['id'] not in reply['text']:
                         continue
 
                     target_post = app.storage.client['posts_by_id'].get(reply['id'])
