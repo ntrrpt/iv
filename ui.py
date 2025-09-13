@@ -87,15 +87,18 @@ def scroll_to_post(post_id: int):
 def render_post_text(text: str):
     html_lines = []
     for line in text.split('\n'):
-        if line.startswith('>') and not line.startswith('>>'):
+        if line.strip().startswith('&gt;') and not line.strip().startswith(
+            '<p>&gt;&gt;'
+        ):
             html_lines.append(
                 f'<div style="color:green; margin:0; padding:0;">{line}</div>'
             )
 
-        elif line.startswith('>>'):
+        elif line.startswith(('<p>&gt;&gt;', '&gt;&gt;')):
             try:
-                target_id = int(line[2:])
-                link = ui.link(line, None)
+                line = line.removeprefix('<p>&gt;&gt;')
+                target_id = int(line)
+                link = ui.link('>>' + line, None)
 
                 # todo: try/raise, just blue label on non-ext posts
                 target_post = app.storage.client['posts_by_id'].get(target_id)
@@ -142,7 +145,7 @@ def render_post_text(text: str):
 
         else:
             html_lines.append(f'<div style="margin:0; padding:0;">{line}</div>')
-    return '<br>'.join(html_lines)
+    return '\n'.join(html_lines)
 
 
 def render_skipped(sk: str):
@@ -275,7 +278,7 @@ def render_post(post, disable_menu=False):
                         )
 
             ui.separator()
-            ui.html(render_post_text(post['text'])).style('line-height: 1;')
+            ui.html(render_post_text(post['text'])).style('line-height: 1.1;')
 
 
 @ui.page('/db/{board}')
@@ -304,6 +307,8 @@ async def db_thread(board: str, thread_id: int):
         s = f"thread '{thread_id}' not found"
         log.warning(s)
         raise HTTPException(status_code=404, detail=s)
+
+    ui.add_head_html(util.css_spoiler)
 
     def draw(page=0):
         app.storage.client['page'] = page
@@ -408,6 +413,8 @@ async def db_search():
 
     if not args.db:
         raise HTTPException(status_code=404, detail='--db not enabled')
+
+    ui.add_head_html(util.css_spoiler)
 
     async def draw(page=0):
         limit = int(posts_on_page.value)

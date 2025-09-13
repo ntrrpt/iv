@@ -2,19 +2,17 @@ from loguru import logger as log
 from datetime import datetime
 from pathlib import Path
 
-import subprocess
 import mimetypes
 import sys
 import pprint
-import shutil
 import requests
 import time
 import os
 
 from email.utils import parsedate_to_datetime
+from aiohttp_socks import ProxyConnector
 import asyncio
 import aiofiles
-from aiohttp_socks import ProxyConnector
 import aiohttp
 
 ext_2_mime = mimetypes.types_map
@@ -36,6 +34,22 @@ for ext, mime in ext_2_mime.items():
         audio_exts.append(ext)
 
 via_exts = [video_exts + image_exts + audio_exts]
+
+css_spoiler = """
+    <style>
+    .spoiler {
+        background: #000000;
+        color: #000000;
+        border-radius: 3px;
+        padding: 0 2px;
+        cursor: pointer;
+    }
+    .spoiler:hover {
+        background: #000000;
+        color: #FFFFFF;
+    }
+    </style>
+    """
 
 
 def get_with_retries(url, max_retries=5, retry_delay=10, proxy='', headers={}):
@@ -75,7 +89,7 @@ async def _dw_file(session, url, dest_folder, sem, max_retries, retry_delay):
     dest_path = Path(dest_folder) / filename
 
     if dest_path.is_file():
-        log.info(dest_path)
+        log.trace(dest_path)
         return
 
     async with sem:
@@ -96,7 +110,7 @@ async def _dw_file(session, url, dest_folder, sem, max_retries, retry_delay):
                         ts = dt.timestamp()
                         os.utime(dest_path, (ts, ts))
 
-                    log.success(dest_path)
+                    log.trace(dest_path)
                     return
 
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:

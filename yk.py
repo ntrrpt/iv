@@ -1,15 +1,14 @@
 import util
 import db
-import requests
 import re
 import mimetypes
 import argparse
 import dateparser
-import subprocess
 import os
 import sys
 import asyncio
-import warnings, json
+import warnings
+import json
 
 from stopwatch import Stopwatch
 from loguru import logger as log
@@ -18,6 +17,7 @@ from bs4 import BeautifulSoup
 from yarl import URL
 
 SITE = URL('http://ii.yakuji.moe')
+res_pattern = re.compile(r'^/.+/res/\d+\.html#(\d+)$')
 
 # fmt: off
 main_boards = [
@@ -155,7 +155,7 @@ def dump(sfx, from_to):
         for a in td.find_all('a'):
             text = a.get_text(strip=True)
             if text.isdigit() and int(text) in fr_range:
-                pages.append(url / a.get('href'))
+                pages += [url / a.get('href')]
 
     ###########################################################################
 
@@ -249,6 +249,23 @@ def parse_skipped(skip_str: str) -> tuple:
     return (msg, img)
 
 
+def replace_res_links_with_text(html: str) -> str:
+    """
+    Принимает HTML-фрагмент, находит все ссылки вида /{board}/res/...#номер
+    и заменяет их на текст '>>номер'. Остальной HTML остаётся без изменений.
+    """
+    soup = BeautifulSoup(html, 'html.parser')
+
+    for a in soup.find_all('a', href=True):
+        match = res_pattern.match(a['href'])
+        if match:
+            number = match.group(1)
+            # заменяем тег <a> на текст '>>номер'
+            a.replace_with(f'>>{number}')
+
+    return str(soup)
+
+
 def parse_thread(html: str) -> dict:
     thread = {}
     posts = []
@@ -274,7 +291,10 @@ def parse_thread(html: str) -> dict:
         if t:
             files.append(t)
 
-        text = op.find_all('blockquote')[0].get_text('\n', strip=True)
+        # fixme:  <blockquote class="unkfunc">\ and oth
+        bq = op.find('blockquote')
+        text = bq.decode_contents()
+        text = replace_res_links_with_text(text)
 
         op_json = {
             'id': op_id,
@@ -322,12 +342,14 @@ def parse_thread(html: str) -> dict:
         if t:
             files.append(t)
 
-        bq = post.find_all('blockquote')
+        bq = post.find('blockquote')
         if not bq:  # a_arch fix
             log.warning('no text in reply')
             continue
 
-        text = bq[-1].get_text('\n', strip=True)
+        # fixme:  <blockquote class="unkfunc">\ and oth
+        text = bq.decode_contents()
+        text = replace_res_links_with_text(text)
 
         reply_json = {
             'id': post_id,
@@ -345,7 +367,7 @@ def parse_thread(html: str) -> dict:
     return thread
 
 
-async def make_db(dump_path='b', db_url='ii.db'):
+async def make_db(dump_path, db_url):
     dump_folder = Path(dump_path)
 
     if not dump_folder.exists():
@@ -380,10 +402,11 @@ async def make_db(dump_path='b', db_url='ii.db'):
     sw_b.restart()
 
     for i, item in enumerate(threads, start=1):
-        files = [f for f in item.iterdir() if f.is_file()]
+        th_id = item.name
 
-        html_files = [f for f in files if f.name == f'{item.name}.html']
-        json_files = [f for f in files if f.name == f'{item.name}.json']
+        files = [f for f in item.iterdir() if f.is_file()]
+        html_files = [f for f in files if f.name == f'{th_id}.html']
+        json_files = [f for f in files if f.name == f'{th_id}.json']
 
         if json_files:
             with open(json_files[0], 'r', encoding='utf-8') as f:
@@ -394,11 +417,11 @@ async def make_db(dump_path='b', db_url='ii.db'):
                 thread = parse_thread(f.read())
 
         else:
-            log.warning(f'{board_name}/{item.name}: no html/json lole')
+            log.warning(f'{board_name}/{th_id}: no html/json lole')
             continue
 
         if not thread['posts']:
-            log.warning(f'{board_name}/{item.name}: no posts lole')
+            log.warning(f'{board_name}/{th_id}: no posts lole')
             continue
 
         first_post_id = thread['posts'][0]['id']
@@ -409,7 +432,7 @@ async def make_db(dump_path='b', db_url='ii.db'):
             board_id, thread_id, thread['posts'], item if args.files else ''
         )
 
-        log.info('%5s / %s, %s/%s' % (i, len(threads), board_name, item.name))
+        log.info('%5s / %s, %s/%s' % (i, len(threads), board_name, th_id))
 
     sw_b.stop()
     log.success(f'{dump_folder}: {str(sw_b)}')
@@ -454,6 +477,10 @@ if __name__ == '__main__':
         log.add(sys.stderr, level='TRACE')
 
     log.add('yk.txt')
+
+    """r = util.get_with_retries('http://ii.yakuji.moe/azu/res/3971.html', proxy=args.proxy)
+    th = parse_thread(r.text)
+    sys.exit(1)"""
 
     if args.sfx:
         match args.sfx[0]:
