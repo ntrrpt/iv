@@ -250,17 +250,27 @@ def parse_skipped(skip_str: str) -> tuple:
 
 
 def replace_res_links_with_text(html: str) -> str:
-    """replaces /board/res/thread.html[#post] with >>post or >>thread"""
-    soup = BeautifulSoup(html, "html.parser")
+    """
+    replaces /board/res/thread.html[#post] with >>post or >>thread
+    also adds \n, if in <p> after numero <br> is missing
+    """
+    soup = BeautifulSoup(html, 'html.parser')
 
-    for a in soup.find_all("a", href=True):
+    for a in soup.find_all('a', href=True):
         match = res_pattern.match(a['href'])
         if match:
             board, thread_id, post_number = match.groups()
-            if post_number:   #1234
-                replacement = f">>{post_number}"
-            else:             #op
-                replacement = f">>{thread_id}"
+            number = post_number if post_number else thread_id
+
+            # проверяем: есть ли <br> сразу после <a>
+            has_br = False
+            sibling = a.next_sibling
+            while sibling is not None and str(sibling).strip() == '':
+                sibling = sibling.next_sibling
+            if getattr(sibling, 'name', None) == 'br':
+                has_br = True
+
+            replacement = f'>>{number}' if has_br else f'\n>>{number}\n'
             a.replace_with(replacement)
 
     return str(soup)
