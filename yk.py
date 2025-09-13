@@ -7,7 +7,6 @@ import dateparser
 import os
 import sys
 import asyncio
-import warnings
 import json
 
 from stopwatch import Stopwatch
@@ -449,9 +448,6 @@ async def make_db(dump_path, db_url):
 
 
 if __name__ == '__main__':
-    # for async event loops
-    warnings.filterwarnings('ignore', category=DeprecationWarning)
-
     ap = argparse.ArgumentParser(description='ii.yakuji.moe tools')
     add = ap.add_argument
     evg = os.environ.get
