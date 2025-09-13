@@ -135,7 +135,7 @@ def dump(sfx, from_to):
         log.error('invalid board')
         return
 
-    url = SITE / sfx
+    url = SITE / sfx.replace('_', '/')
 
     r = util.get_with_retries(url, proxy=args.proxy)
     soup = BeautifulSoup(r.text, 'html.parser')
@@ -154,20 +154,20 @@ def dump(sfx, from_to):
         for a in td.find_all('a'):
             text = a.get_text(strip=True)
             if text.isdigit() and int(text) in fr_range:
-                pages += [url / a.get('href')]
+                pages += [(SITE if 'arch' in sfx else url) / a.get('href').lstrip("/")]
 
     ###########################################################################
 
     threads = []
 
     for i, page in enumerate(pages):
+        log.info('%4s / %s, %s found' % (i + 1, len(pages), len(threads)))
+
         r = util.get_with_retries(page, proxy=args.proxy)
         catalog = parse_catalog(r.text)
 
         for th in catalog:
             threads.append(url / 'res' / f'{th["id"]}.html')
-
-        log.info('%4s / %s, %s found' % (i + 1, len(pages), len(threads)))
 
     ###########################################################################
 
@@ -261,7 +261,6 @@ def replace_res_links_with_text(html: str) -> str:
             board, thread_id, post_number = match.groups()
             number = post_number if post_number else thread_id
 
-            # проверяем: есть ли <br> сразу после <a>
             has_br = False
             sibling = a.next_sibling
             while sibling is not None and str(sibling).strip() == '':
@@ -489,13 +488,13 @@ if __name__ == '__main__':
     if args.sfx:
         match args.sfx[0]:
             case 'main':
-                log.info('main boards set: %s' % main_sfxs)
+                log.info(f'main boards set: {main_sfxs!r}')
                 args.sfx = main_sfxs
             case 'arch':
-                log.info('arch boards set: %s' % arch_sfxs)
+                log.info(f'arch boards set: {arch_sfxs!r}')
                 args.sfx = arch_sfxs
             case 'all':
-                log.info('all boards set: %s' % all_sfxs)
+                log.info(f'all boards set: {all_sfxs!r}')
                 args.sfx = all_sfxs
 
         for s in args.sfx:
