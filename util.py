@@ -52,7 +52,7 @@ css_spoiler = """
     """
 
 
-def get_with_retries(url, max_retries=5, retry_delay=10, proxy='', headers={}):
+def get_with_retries(url, max_retries=10, retry_delay=10, proxy='', headers={}):
     proxies = {'http': proxy, 'https': proxy} if proxy else None
 
     for attempt in range(1, max_retries + 1):
@@ -61,9 +61,9 @@ def get_with_retries(url, max_retries=5, retry_delay=10, proxy='', headers={}):
             r.raise_for_status()
             return r
         except requests.exceptions.HTTPError as e:
-            raise Exception('http failed:', e, '| status:', r.status_code)
+            raise Exception(f'http failed: {e!r}, status: {r.status_code}')
         except requests.exceptions.RequestException as e:
-            log.warning(f'attempt {attempt} failed: {e}. retrying...')
+            log.warning(f'attempt {attempt} failed: {e!r}. retrying...')
             time.sleep(retry_delay)
     raise Exception(f'failed {url} after {max_retries} tries')
 
@@ -89,7 +89,7 @@ async def _dw_file(session, url, dest_folder, sem, max_retries, retry_delay):
     dest_path = Path(dest_folder) / filename
 
     if dest_path.is_file():
-        log.trace(dest_path)
+        log.trace(f'[skip] {dest_path}')
         return
 
     async with sem:
@@ -117,7 +117,7 @@ async def _dw_file(session, url, dest_folder, sem, max_retries, retry_delay):
                 log.warning(f'{dest_path} (attempt {attempt}/{max_retries}): {e}')
 
                 if attempt >= max_retries:
-                    log.error(f'failed {url} after {max_retries} попыток')
+                    log.error(f'failed {url!r} after {max_retries} tries')
                     return
 
                 await asyncio.sleep(retry_delay)
