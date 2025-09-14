@@ -75,9 +75,9 @@ main_boards = [
 
     ['misc',  'Баннеры'],
     ['tenma', 'Юбилейные Баннеры'],
-    ['vndev', 'Разработка визуальных новелл'],
+    #['vndev', 'Разработка визуальных новелл'], # only one thread (index)
 
-    ['dev',   'Работа архива'] # fail
+    #['dev',   'Работа архива']   only one page (w/o index)
 ]
 
 arch_boards = [
@@ -132,10 +132,10 @@ all_sfxs = main_sfxs + arch_sfxs
 
 def dump(sfx, from_to):
     if sfx not in all_sfxs:
-        log.error('invalid board')
+        log.error(f'invalid board: {sfx}')
         return
 
-    url = SITE / sfx.replace('_', '/')
+    url = SITE / sfx.replace('arch_', 'arch/')
 
     r = util.get_with_retries(url, proxy=args.proxy)
     soup = BeautifulSoup(r.text, 'html.parser')
@@ -144,6 +144,7 @@ def dump(sfx, from_to):
     fr_range = [x for x in range(int(fr), int(to))]
 
     ###########################################################################
+    # extract pages
 
     pages = []
 
@@ -157,19 +158,27 @@ def dump(sfx, from_to):
                 pages += [(SITE if 'arch' in sfx else url) / a.get('href').lstrip("/")]
 
     ###########################################################################
+    # extract threads from pages
 
     threads = []
 
     for i, page in enumerate(pages):
         log.info('%4s / %s, %s found' % (i + 1, len(pages), len(threads)))
 
-        r = util.get_with_retries(page, proxy=args.proxy)
+        try:
+            r = util.get_with_retries(page, proxy=args.proxy)
+        except Exception as e:
+            # 500: http://ii.yakuji.moe/b/950.html
+            log.opt(exception=True).error(f'{page}: {e}')
+            continue
+
         catalog = parse_catalog(r.text)
 
         for th in catalog:
             threads.append(url / 'res' / f'{th["id"]}.html')
 
     ###########################################################################
+    # extract posts from threads
 
     for i, thread in enumerate(threads):
         log.info('%4s / %s, %s' % (i + 1, len(threads), thread))
@@ -300,22 +309,23 @@ def parse_thread(html: str) -> dict:
             files.append(t)
 
         bq = op.find('blockquote')
-        text = bq.decode_contents()
-        text = replace_res_links_with_text(text)
+        if bq:        
+            text = bq.decode_contents()
+            text = replace_res_links_with_text(text)
 
-        op_json = {
-            'id': op_id,
-            'files': files,
-            'text': text,
-            'author': op_poster,
-            'time': date_time,
-            'index': len(posts) + 1,
-        }
+            op_json = {
+                'id': op_id,
+                'files': files,
+                'text': text,
+                'author': op_poster,
+                'time': date_time,
+                'index': len(posts) + 1,
+            }
 
-        thread['id'] = op_id
-        thread['title'] = op_title
+            thread['id'] = op_id
+            thread['title'] = op_title
 
-        posts.append(op_json)
+            posts.append(op_json)
 
     # SKIPPED (catalog)
     skip_str = str(soup.find_all('span', class_='omittedposts'))
@@ -480,10 +490,6 @@ if __name__ == '__main__':
         log.add(sys.stderr, level='TRACE')
 
     log.add('yk.txt')
-
-    """r = util.get_with_retries('http://ii.yakuji.moe/azu/res/3971.html', proxy=args.proxy)
-    th = parse_thread(r.text)
-    sys.exit(1)"""
 
     if args.sfx:
         match args.sfx[0]:
