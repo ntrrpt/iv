@@ -19,8 +19,8 @@ dependencies = [
     "yarl>=1.20.1",
 ]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "ruff"
 ]
 
