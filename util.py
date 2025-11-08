@@ -1,19 +1,18 @@
-from loguru import logger as log
+import asyncio
+import mimetypes
+import os
+import pprint
+import sys
+import time
 from datetime import datetime
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
-import mimetypes
-import sys
-import pprint
-import requests
-import time
-import os
-
-from email.utils import parsedate_to_datetime
-from aiohttp_socks import ProxyConnector
-import asyncio
 import aiofiles
 import aiohttp
+import requests
+from aiohttp_socks import ProxyConnector
+from loguru import logger as log
 
 ext_2_mime = mimetypes.types_map
 mime_2_ext = {}

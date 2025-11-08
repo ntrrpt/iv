@@ -1,19 +1,20 @@
-import util
-import db
-import re
-import mimetypes
 import argparse
-import dateparser
-import os
-import sys
 import asyncio
 import json
-
-from stopwatch import Stopwatch
-from loguru import logger as log
+import mimetypes
+import os
+import re
+import sys
 from pathlib import Path
+
+import dateparser
 from bs4 import BeautifulSoup
+from loguru import logger as log
+from stopwatch import Stopwatch
 from yarl import URL
+
+import db
+import util
 
 SITE = URL('http://ii.yakuji.moe')
 res_pattern = re.compile(r'^/([^/]+)/res/(\d+)\.html(?:#(\d+))?$')
@@ -155,7 +156,7 @@ def dump(sfx, from_to):
         for a in td.find_all('a'):
             text = a.get_text(strip=True)
             if text.isdigit() and int(text) in fr_range:
-                pages += [(SITE if 'arch' in sfx else url) / a.get('href').lstrip("/")]
+                pages += [(SITE if 'arch' in sfx else url) / a.get('href').lstrip('/')]
 
     ###########################################################################
     # extract threads from pages
@@ -309,7 +310,7 @@ def parse_thread(html: str) -> dict:
             files.append(t)
 
         bq = op.find('blockquote')
-        if bq:        
+        if bq:
             text = bq.decode_contents()
             text = replace_res_links_with_text(text)
 

@@ -8,17 +8,19 @@ todo:
     - disable displaying pics ???????
 """
 
-from nicegui import app, ui
-from fastapi import HTTPException
-from fastapi.responses import Response, FileResponse
-from contextlib import suppress
-from loguru import logger as log
-from pathlib import Path
-from stopwatch import Stopwatch
 import argparse
 import sys
-import util
+from contextlib import suppress
+from pathlib import Path
+
+from fastapi import HTTPException
+from fastapi.responses import FileResponse, Response
+from loguru import logger as log
+from nicegui import app, ui
+from stopwatch import Stopwatch
+
 import db
+import util
 
 db_stats = {}
 cache_files = {}

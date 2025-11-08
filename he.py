@@ -1,16 +1,17 @@
-import os
 import argparse
+import asyncio
 import json
-import util
-from time import sleep as delay
-from yarl import URL
+import os
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from bs4 import BeautifulSoup
-from loguru import logger as log
-from dataclasses import dataclass, asdict
+from time import sleep as delay
 from typing import Optional
 
-import asyncio
+from bs4 import BeautifulSoup
+from loguru import logger as log
+from yarl import URL
+
+import util
 
 SITE = URL('https://img.heyuri.net')
 BOARDS = ['a', 'b', 'c', 'h', 'j', 'jp', 'l', 'q', 's']
